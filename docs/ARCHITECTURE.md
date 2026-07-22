@@ -129,10 +129,16 @@ Composition over inheritance wherever possible.
    extracting shared infrastructure only once two implementations exercise
    it (the "rule of two"). An interface is a draft until its second consumer
    exists. The roadmap sequences this explicitly.
-4. **Determinism is a feature.** Every run is reproducible from
-   `(config, git SHA, seed)`. Seeding is centralized; RNG state is part of
-   checkpoints; CPU-deterministic tests are the bar (GPU determinism
-   documented as best-effort, per PyTorch's own guarantees).
+4. **Determinism is a feature — with a narrowly stated guarantee.** Seeding
+   is centralized (`seed_everything` establishes controlled random streams),
+   and RNG state is part of checkpoints. Controlled streams alone do not make
+   training deterministic: full run determinism additionally depends on
+   deterministic PyTorch operations, hardware, environment behavior,
+   threading, and pinned software versions. The claim we test is therefore
+   same-machine CPU reproducibility from `(config, git SHA, seed)` with the
+   locked dependency set; GPU determinism is best-effort per PyTorch's own
+   guarantees, with `torch.use_deterministic_algorithms` as a documented
+   opt-in.
 5. **Verify against references, numerically.** For each algorithm we test
    *loss-level parity* with Stable-Baselines3 (same synthetic batch in → same
    loss out, to numerical tolerance), not just "similar learning curves."
@@ -191,7 +197,12 @@ tests.
 
 A minimal, typed, dict-like container of tensors with attribute access,
 `.to(device)`, length, slicing, and minibatch iteration. Roughly 150 lines,
-exhaustively tested. Canonical keys are documented constants
+exhaustively tested. `Batch` v1 is a **deliberately narrow abstraction** — a
+flat container of same-length, same-device tensors, not the platform's final
+universal RL data model; nested observations, sequence/recurrent layouts, and
+multi-agent structures are explicitly out of its scope and get revisited
+against real requirements at the decision point below. Canonical keys are
+documented constants
 (`obs`, `action`, `reward`, `terminated`, `truncated`, `next_obs`,
 `logprob`, `value`, …); algorithms may add keys.
 

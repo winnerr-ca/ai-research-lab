@@ -6,9 +6,14 @@ entry point, :func:`seed_everything`, which seeds the global RNGs (for
 third-party code that draws from them) and returns an :class:`Rng` bundle of
 explicitly seeded generators for our own code to draw from.
 
-GPU determinism is best-effort per PyTorch's own guarantees; the tested
-reproducibility bar is CPU (``torch.use_deterministic_algorithms`` is a
-documented opt-in, not set here).
+Scope of the guarantee, stated narrowly: :func:`seed_everything` establishes
+controlled random *streams* — it does not by itself make training runs
+deterministic. Full training determinism additionally depends on
+deterministic PyTorch operations (``torch.use_deterministic_algorithms``,
+kernel/reduction behavior), hardware, environment (simulator) behavior,
+threading, and pinned software versions. The platform's tested bar is
+same-machine CPU determinism with the locked dependency set; GPU determinism
+is best-effort per PyTorch's own guarantees.
 """
 
 from __future__ import annotations
@@ -58,8 +63,9 @@ class Rng:
         Derivation depends only on ``(self.seed, index)`` — not on call order
         and not on any generator's current state — so components can be
         re-seeded independently and in any order. Mixing goes through
-        :class:`numpy.random.SeedSequence`, so nearby root seeds or indices do
-        not produce correlated streams (as naive ``seed + index`` schemes do).
+        :class:`numpy.random.SeedSequence`, which is designed to provide
+        reproducible, well-separated child streams from a root seed and a
+        spawn key.
 
         Args:
             index: Non-negative stream index.

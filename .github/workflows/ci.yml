@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   checks:
@@ -26,5 +27,23 @@ jobs:
       - name: Type-check
         run: uv run mypy
 
-      - name: Test
+      - name: Test (fast, deterministic)
         run: uv run pytest
+
+  slow-validation:
+    # Stochastic learning canaries; run on demand, not on every push.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Learning canaries
+        run: uv run pytest -m slow

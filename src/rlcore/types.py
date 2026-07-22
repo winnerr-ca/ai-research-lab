@@ -67,8 +67,15 @@ class PolicyOutput:
 class Batch:
     """An immutable container of tensors sharing a leading (batch) dimension.
 
-    ``Batch`` is the one structure transition data travels in, from collection
-    through buffers and transforms to agent updates. All fields are
+    ``Batch`` is the structure transition data travels in, from collection
+    through buffers and transforms to agent updates. Version 1 is a
+    deliberately narrow abstraction — a flat container of same-length,
+    same-device tensors — not the platform's final universal RL data model:
+    nested observation structures, sequence/recurrent layouts, and multi-agent
+    data are out of scope and will be revisited against real requirements
+    (see the TensorDict decision point, ``docs/ARCHITECTURE.md`` §5).
+
+    All fields are
     :class:`torch.Tensor` (conversion policy belongs to the collector, not
     here), share the same size along dimension 0, and live on the same device.
     Field dtypes are deliberately heterogeneous (float observations, integer
