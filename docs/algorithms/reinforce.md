@@ -47,24 +47,30 @@ expectation of the score is zero). Dropping those terms leaves the
 
 Same expectation, strictly lower (or equal) variance.
 
-## 4. Variance reduction II: baselines and our standardization
+## 4. Variance reduction II: baselines — and what this implementation does
 
-Subtracting any action-independent baseline b(s_t) from G_t leaves the
-gradient unbiased: E[∇log π_θ(a_t|s_t) · b(s_t)] = b · E[score] = 0.
+The theory: subtracting an action-independent baseline b(s_t) from G_t
+leaves the gradient unbiased — E[∇log π_θ(a_t|s_t) · b(s_t)] = 0 — *when
+the baseline is chosen independently of the sampled batch it is applied to*.
 
-This implementation uses **batch return standardization**
-(`normalize_returns=True`): within each update batch, returns are shifted by
-their mean and divided by their standard deviation. Two honest caveats:
+What this implementation actually does (`normalize_returns=True`) is
+**same-batch return standardization**: within each update batch, returns are
+shifted by the batch mean and divided by the batch standard deviation. This
+is a **configurable implementation heuristic**, and it should not be
+described as an ordinary unbiased constant baseline:
 
-- The subtracted mean is a *constant* baseline estimated from the same batch
-  it is applied to, which introduces a small O(1/N) correlation bias — in
-  practice negligible against the variance it removes.
-- Dividing by the standard deviation is not a baseline at all; it rescales
-  the gradient, acting as an adaptive step size that makes a single learning
-  rate workable across training stages.
+- The subtracted mean is a statistic *estimated from the same sampled
+  returns it is applied to*; that correlation can introduce finite-batch
+  bias in the gradient estimate (diminishing as the batch grows).
+- Division by the standard deviation is not a baseline at all: it rescales
+  the update, changing the effective step size adaptively across training
+  stages.
 
-A learned state-value baseline (actor-critic) is the principled next step and
-arrives with PPO at M2.
+The heuristic is widely used and empirically stabilizing, which is why it is
+the default — but it is a default with documented caveats, and the flag
+exists precisely so its effect can be ablated. A learned state-value
+baseline (actor-critic) is the principled construction and arrives with PPO
+at M2.
 
 ## 5. Two documented biases in the standard estimator
 
@@ -73,14 +79,23 @@ arrives with PPO at M2.
    all practical implementations, we drop it — the resulting update is not
    the gradient of J but of a related "average-ish" objective (Thomas, ICML
    2014; Nota & Thomas, AAMAS 2020). Standard practice, stated openly.
-2. **Truncation.** `G_{T−1} = r_{T−1}` assumes the episode is over. When the
-   env *truncates* (CartPole-v1's 500-step time limit), the true return
-   continues past the cutoff, so late-episode reward-to-go is
-   underestimated. Vanilla REINFORCE has no value function to bootstrap
-   from, so this bias is inherent to the algorithm on time-limited tasks
-   (Pardo et al., ICML 2018). The collector records `terminated` and
-   `truncated` separately precisely so bootstrapping algorithms (M2+) can do
-   this correctly.
+2. **Truncation.** `G_{T−1} = r_{T−1}` assumes the episode is over. Whether
+   that is *correct* depends on a modelling choice that must be stated, not
+   assumed. **Our stated choice for CartPole-v1:** we treat it as an
+   indefinite-horizon task — episodes end "for real" only when the pole
+   falls or the cart leaves the track — and the 500-step limit as an
+   *external interruption* that is not part of the task MDP. Under that
+   reading, return continues to exist past a truncation and should be
+   estimated, so treating truncation as terminal underestimates
+   late-episode reward-to-go (Pardo et al., ICML 2018). The opposite
+   reading — a genuinely finite-horizon task whose deadline is part of the
+   objective (ideally with remaining time in the observation) — would make
+   the terminal treatment correct. A value function (PPO, M2) *enables*
+   bootstrapping at truncation; it does not by itself decide which model of
+   the task is right. Vanilla REINFORCE has no value function, so under our
+   stated choice this bias is inherent to it on time-limited tasks; the
+   collector records `terminated` and `truncated` separately precisely so
+   M2+ can implement the stated choice correctly.
 
 ## 6. Why high variance, and other weaknesses
 

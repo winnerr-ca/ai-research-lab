@@ -118,11 +118,40 @@ def write_report(records: list[dict[str, Any]], config: ReinforceConfig, out_dir
     config_dict: dict[str, Any] = dataclasses.asdict(config)
     config_dict["seed"] = "per-run (see table)"
     lines = [
-        "# M1 validation: REINFORCE on CartPole-v1 (multi-seed)",
+        "# M1 end-to-end implementation validation: REINFORCE on CartPole-v1",
         "",
         f"Seeds: {[r['seed'] for r in records]} — one full training run each, "
         "default `ReinforceConfig`, greedy + stochastic final evaluation "
         f"({config.eval_episodes} episodes each).",
+        "",
+        "**Scope of this result.** This is an end-to-end *implementation*",
+        "validation: evidence that the implementation trains successfully on",
+        "this task across seeds. It is not evidence of algorithmic",
+        "superiority, and no performance claim beyond this task, this",
+        "configuration, and the environment recorded below is intended.",
+        "",
+        "## Evaluation protocol",
+        "",
+        "- **Seed streams:** the root seed derives independent child seeds",
+        "  via `SeedSequence` — child 0 seeds the training env, child 1 the",
+        "  training action space, child 2 the *separate* evaluation env.",
+        "  Action sampling during training draws from the bundle's explicit",
+        "  torch generator.",
+        f"- **Evaluation frequency:** a greedy ({config.eval_episodes}-episode)",
+        f"  evaluation every {config.eval_every} updates on the dedicated eval",
+        "  env; its RNG stream continues across evaluations (episodes are",
+        "  fresh draws from the stream, not re-seeded per evaluation).",
+        "- **Stopping rule:** training stops early when a periodic greedy",
+        f"  evaluation's mean return reaches {config.stop_return}, with a hard",
+        f"  budget of {config.updates} updates otherwise.",
+        "- **Final evaluation:** after training ends (early stop or budget),",
+        f"  a *fresh* greedy {config.eval_episodes}-episode evaluation runs on",
+        "  the same eval env's continuing stream — the greedy numbers in the",
+        "  table are this re-evaluation, not the evaluation that triggered",
+        "  the stop.",
+        "- **Stochastic evaluation:** a separate env and sampling generator,",
+        f"  both seeded `{STOCHASTIC_EVAL_SEED_OFFSET} + seed`, independent of",
+        "  all training streams.",
         "",
         "## Configuration",
         "",
@@ -156,6 +185,10 @@ def write_report(records: list[dict[str, Any]], config: ReinforceConfig, out_dir
         "Small-sample caveat: these are per-seed point estimates over "
         f"{len(records)} seeds; the rliable aggregate-metrics protocol "
         "(IQM, bootstrap CIs) arrives with the M4 evaluation engine.",
+        "",
+        "Reproducibility scope: these numbers are expected to reproduce only "
+        "under the pinned software versions recorded above, on CPU, on "
+        "comparable hardware; no broader reproducibility claim is intended.",
         "",
         "## Reproduce",
         "",

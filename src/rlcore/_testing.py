@@ -1,9 +1,11 @@
-"""Deterministic test-support components.
+"""Private deterministic test-support components. Not public API.
 
 Exact tests need environments whose rewards, lengths, and termination mode
-are known in advance. :class:`ScriptedEnv` provides that; it is part of the
-package (rather than the test tree) so later milestones' tests — and
-downstream users testing their own components — can reuse it.
+are known in advance; :class:`ScriptedEnv` provides that for this project's
+own test suites (unit, parity, and later milestones'). The underscore prefix
+is deliberate: this module carries no stability guarantees and is not part
+of the ``rlcore`` public surface. It graduates to a public module only if a
+real user-facing need emerges.
 """
 
 from __future__ import annotations

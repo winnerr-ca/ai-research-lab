@@ -51,8 +51,10 @@ class ReinforceConfig:
         gamma: Discount factor for reward-to-go.
         lr: Adam learning rate.
         hidden_sizes: Policy MLP hidden-layer widths.
-        normalize_returns: Standardize returns within each update batch
-            (variance reduction; see the derivation doc for the bias note).
+        normalize_returns: Same-batch return standardization — a configurable
+            variance-reduction heuristic, not an ordinary unbiased baseline:
+            same-batch mean subtraction may introduce finite-batch bias, and
+            std division rescales the effective step size (derivation doc §4).
         eval_every: Run a greedy evaluation every this many updates
             (0 disables periodic evaluation; a final evaluation always runs).
         eval_episodes: Episodes per evaluation.
@@ -108,8 +110,9 @@ def reinforce_update(
 
     Returns are computed per episode (no leakage across boundaries), then
     concatenated; with ``normalize_returns`` they are standardized across the
-    whole update batch. The loss is the mean over all steps of
-    ``-log pi(a_t|s_t) * G_t``.
+    whole update batch (a heuristic — see ``ReinforceConfig`` and the
+    derivation doc §4 for its caveats). The loss is the mean over all steps
+    of ``-log pi(a_t|s_t) * G_t``.
 
     Args:
         policy: Policy to update.

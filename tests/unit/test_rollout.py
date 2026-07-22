@@ -7,9 +7,9 @@ import copy
 import pytest
 import torch
 
+from rlcore._testing import ScriptedEnv
 from rlcore.agents.reinforce.policy import CategoricalMlpPolicy
 from rlcore.agents.reinforce.rollout import EvalStats, collect_episode, evaluate
-from rlcore.testing import ScriptedEnv
 
 
 def make_policy() -> CategoricalMlpPolicy:

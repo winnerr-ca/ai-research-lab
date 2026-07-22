@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING
 import pytest
 import torch
 
+from rlcore._testing import ScriptedEnv
 from rlcore.agents.reinforce.policy import CategoricalMlpPolicy
 from rlcore.agents.reinforce.returns import discounted_returns
 from rlcore.agents.reinforce.rollout import collect_episode
 from rlcore.agents.reinforce.train import ReinforceConfig, reinforce_update, train
-from rlcore.testing import ScriptedEnv
 
 if TYPE_CHECKING:
     from pathlib import Path
