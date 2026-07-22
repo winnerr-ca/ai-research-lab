@@ -1,9 +1,17 @@
 # Architecture
 
-**Status:** Proposal — awaiting review
+**Status:** Revision 2 — vision approved; incorporating review feedback
 **Scope:** System design for the RL research platform: principles, prior art,
 components, interfaces, repository layout, testing strategy, and risks.
 Milestones and phase plans live in [`ROADMAP.md`](ROADMAP.md).
+
+**Changes from revision 1 (review feedback):** package renamed to `rlcore`;
+prior-art and design claims restated in measured terms; GAE invariant
+corrected (λ=1 recovers the Monte-Carlo *advantage*, not the return);
+checkpoint requirements expanded into a full specification; abstraction
+policy changed to *extract from working algorithms* rather than design
+up front — the component list below is the target architecture, and the
+roadmap now reaches it through working algorithm code first.
 
 ---
 
@@ -23,45 +31,50 @@ Consequences of that choice:
   add-ons.
 - **Algorithm code must stay legible.** A researcher modifying PPO's advantage
   estimation should edit one obvious file, not trace an inheritance chain.
-- **Infrastructure must be boring.** Environment handling, logging,
+- **Infrastructure should be boring.** Environment handling, logging,
   checkpointing, and data plumbing get built once, tested hard, and then
-  trusted — because most RL bugs live there, silently.
+  trusted — because data-handling bugs in RL are common and often silent.
 
 ## 2. Lessons from prior art
 
-The design below is a deliberate response to existing frameworks. This matters
-because RL framework design has a well-documented failure mode: abstraction
-layers that make simple things hard and novel things impossible.
+The design below draws on existing frameworks, all of which are good at what
+they were built for. The observations here are about fit for *our* use case —
+single-machine-first research with legible algorithm code — not about quality.
+The recurring tension they illustrate: abstraction that aids reuse can also
+obscure algorithm logic, and each framework resolves that trade-off
+differently.
 
-| Framework | What it gets right | What we avoid |
+| Framework | Strengths | Trade-off for our use case |
 |---|---|---|
-| **CleanRL** | Single-file algorithms; every line visible; excellent reproducibility culture (tracked runs, seeds) | No shared infrastructure — every file re-implements buffers, logging, eval; copy-paste divergence makes fair comparison hard |
-| **Stable-Baselines3** | Reliability; battle-tested correctness; good docs | Monolithic `BaseAlgorithm` owns the training loop; extending an algorithm means subclassing and overriding private-ish methods; research velocity suffers |
-| **Tianshou** | Modular collector/buffer/policy separation | Deep class hierarchies in places; policy objects accumulate responsibilities |
-| **Acme (DeepMind)** | Clean actor/learner split that scales to distributed | Heavy framework machinery; steep entry cost for single-machine research |
-| **RLlib** | Industrial scale | The cautionary tale: so many abstraction layers that debugging a loss function requires understanding a distributed execution model |
-| **TorchRL** | Composable primitives, `TensorDict` data model | Fast-moving API; adopting it wholesale outsources our core data model to a dependency we don't control |
+| **CleanRL** | Single-file algorithms; every line visible; strong reproducibility culture (tracked runs, seeds) | Little shared infrastructure by design — buffers, logging, and eval are re-implemented per file, which makes cross-algorithm comparison and shared fixes harder |
+| **Stable-Baselines3** | Reliability; battle-tested correctness; good docs | Designed for a stable *user-facing* API rather than easy internal modification; `model.learn()` couples algorithm, loop, logging, and eval — the right trade-off for its users, less so for algorithm research |
+| **Tianshou** | Modular collector/buffer/policy separation | Policy objects carry several responsibilities; extension often goes through subclassing |
+| **Acme (DeepMind)** | Clean actor/learner split that scales to distributed | Framework machinery adds entry cost for single-machine research |
+| **RLlib** | Industrial scale and breadth | Generality and distributed execution add layers between a researcher and a loss function; iteration on algorithm internals is slower |
+| **TorchRL** | Composable primitives, `TensorDict` data model | Adopting it wholesale would outsource our core data model to a still-evolving dependency |
 
-**Synthesis — our position:** *shared, hardened infrastructure* (envs, data,
-nets, logging, eval) + *flat, legible algorithm modules* (each algorithm is a
-small package of plain functions and one agent class you can read
-top-to-bottom). Composition over inheritance everywhere.
+**Synthesis — our position:** *shared, tested infrastructure* (envs, data,
+nets, logging, eval) + *flat, legible algorithm modules* (each algorithm a
+small package of plain functions and one agent class readable top-to-bottom).
+Composition over inheritance wherever possible.
 
 ## 3. Design principles
 
 1. **Interfaces are `Protocol`s, not base classes.** Components interact
    through small structural interfaces (duck typing, checked by mypy). No
-   mandatory inheritance; any object with the right methods plugs in. This is
-   what makes "everything replaceable" real rather than aspirational.
-2. **The training loop is owned by the engine, not the agent.** SB3's
-   `model.learn()` couples algorithm, loop, logging, and eval into one object.
-   We invert it: the `TrainingEngine` orchestrates *collect → update → log →
-   eval → checkpoint*; the agent only knows how to act and how to update from
-   a batch. This single decision is what makes algorithms swappable and the
-   loop instrumentable.
-3. **Rule of two.** No abstraction is introduced until the second concrete
-   use exists or is scheduled on the roadmap. This is the guardrail against
-   the RLlib failure mode.
+   mandatory inheritance; any object with the right methods plugs in. This
+   keeps "replaceable through interfaces" enforceable by the type checker.
+2. **The training loop is owned by the engine, not the agent.** The
+   `TrainingEngine` orchestrates *collect → update → log → eval →
+   checkpoint*; the agent only knows how to act and how to update from a
+   batch. This separation is what makes algorithms swappable and the loop
+   instrumentable.
+3. **Abstractions are extracted, not designed up front.** The component
+   architecture in §6 is the *target*. We reach it by building working
+   algorithms first — with plumbing inlined where that is clearer — and
+   extracting shared infrastructure only once two implementations exercise
+   it (the "rule of two"). An interface is a draft until its second consumer
+   exists. The roadmap sequences this explicitly.
 4. **Determinism is a feature.** Every run is reproducible from
    `(config, git SHA, seed)`. Seeding is centralized; RNG state is part of
    checkpoints; CPU-deterministic tests are the bar (GPU determinism
@@ -72,10 +85,10 @@ top-to-bottom). Composition over inheritance everywhere.
    Curve similarity is a weak, expensive signal; loss parity is exact and
    fast.
 6. **Single-machine first, scale-ready by design.** No distributed code until
-   Milestone 8, but the seams for it are chosen now: the actor/learner split
-   (policy vs. agent), serializable configs, and functional collectors are
-   exactly the seams distributed RL needs (this is the Acme lesson, taken
-   without the machinery).
+   the final milestone, but the seams for it are chosen now: the
+   actor/learner split (policy vs. agent), serializable configs, and
+   functional collectors are the seams distributed RL needs (the Acme
+   lesson, without the machinery).
 7. **Statistics or it didn't happen.** Cross-algorithm claims use the
    rliable protocol (Agarwal et al., NeurIPS 2021): interquartile mean,
    bootstrap CIs, performance profiles across seeds — never single-seed
@@ -130,27 +143,28 @@ exhaustively tested. Canonical keys are documented constants
 
 **Decision — custom `Batch` over TorchRL's `TensorDict`:**
 
-- *For custom:* zero heavyweight dependencies; every line understood (this is
+- *For custom:* no heavyweight dependency; every line understood (this is
   also a learning platform); stable under our control; trivial to serialize.
 - *For TensorDict:* free nested structures, memory-mapped storage, ecosystem
   momentum.
-- *Recommendation:* custom for v1. The interface is small enough that
-  migrating to TensorDict later, if nested/multi-agent needs arrive, is a
-  mechanical change confined to `rlab/types.py` and buffer internals. Revisit
-  at Milestone 8.
+- *Decision:* custom for v1. The interface is small enough that migrating to
+  TensorDict later, if nested/multi-agent needs arrive, is a mechanical
+  change confined to `rlcore/types.py` and buffer internals. Revisit at the
+  scale milestone (M7).
 
 **Termination semantics** are fixed at this layer, once: Gymnasium's
 `terminated` (MDP-true absorbing state → bootstrap value 0) vs. `truncated`
 (time-limit cutoff → bootstrap from value function) are distinct fields end to
-end. Conflating them is the single most common silent bug in RL codebases and
-measurably changes results on time-limited tasks (Pardo et al., 2018).
+end. Conflating them is a common, hard-to-detect error that measurably changes
+results on time-limited tasks (Pardo et al., 2018).
 
 ## 6. Components and interfaces
 
 Interface sketches below are architectural contracts, not implementations.
-Signatures will be fully typed in code.
+Per principle 3, each component is *finalized* only when working algorithm
+code exercises it; until then it is a design target.
 
-### 6.1 Environment Manager — `rlab.envs`
+### 6.1 Environment Manager — `rlcore.envs`
 
 Everything that touches the Gymnasium API lives here, so API churn is
 quarantined to one module.
@@ -158,15 +172,15 @@ quarantined to one module.
 - `make_env(cfg) -> gym.Env` factory driven by Hydra config; wrapper stack
   declared in config (order matters and is therefore explicit).
 - Vectorization via Gymnasium's `SyncVectorEnv` / `AsyncVectorEnv` behind our
-  own thin `VecEnv` seam (so a custom, faster vectorizer can replace it later
-  without touching collectors).
+  own thin `VecEnv` seam (so a custom vectorizer can replace it later without
+  touching collectors).
 - Normalization wrappers (observation/reward running statistics) whose state
   is **saved with checkpoints and frozen during evaluation** — normalization
-  leakage between train and eval is another classic silent bug.
+  leakage between train and eval is another common silent error.
 - Central seeding: one seed in the config fans out deterministically to envs,
   torch, numpy, and Python `random`.
 
-### 6.2 Agent Interface — `rlab.agents`
+### 6.2 Agent Interface — `rlcore.agents`
 
 Two protocols, deliberately separated:
 
@@ -182,42 +196,53 @@ class Agent(Policy, Protocol):   # learning — what the training engine needs
 
 `PolicyOutput` carries the action plus algorithm-specific extras (log-prob,
 value estimate) that the collector stores into the `Batch`. The Policy/Agent
-split is what lets the Evaluation Engine, and later distributed actors, hold
-only inference capability.
+split lets the Evaluation Engine, and later distributed actors, hold only
+inference capability.
 
-Each algorithm is a flat package — e.g. `rlab/agents/ppo/` containing
-`agent.py` (the class), `loss.py` (pure functions: policy loss, value loss,
-GAE lives in `rlab.data.transforms` since A2C shares it), and `config.py`
-(a dataclass registered with Hydra). Pure loss functions are independently
-unit-testable and parity-testable against SB3.
+Each algorithm is a flat package — e.g. `rlcore/agents/ppo/` containing
+`agent.py` (the class), `loss.py` (pure functions: policy loss, value loss;
+GAE lives in `rlcore.data.transforms` since multiple algorithms share it),
+and `config.py` (a dataclass registered with Hydra). Pure loss functions are
+independently unit-testable and parity-testable against SB3.
 
-### 6.3 Neural Network Library — `rlab.nets`
+### 6.3 Neural Network Library — `rlcore.nets`
 
 - **Torsos:** MLP, Nature-CNN (Mnih et al., 2015); interface takes an
   observation space, returns a feature tensor.
 - **Heads:** categorical policy, diagonal Gaussian policy (with optional tanh
   squashing *and the corresponding log-prob correction* — omitting the
-  correction is the classic SAC bug), state-value, Q-value, dueling Q.
+  correction is a well-documented implementation error in SAC-style
+  algorithms), state-value, Q-value, dueling Q.
 - **Distributions:** thin wrappers over `torch.distributions` fixing
   shape/`log_prob` conventions once.
 - **Initialization:** orthogonal init with per-layer gains as the default for
-  policy networks — an empirically load-bearing detail for PPO
+  policy networks — an empirically important detail for PPO
   (Engstrom et al., ICLR 2020, "Implementation Matters").
 
-### 6.4 Data path — `rlab.data`
+### 6.4 Data path — `rlcore.data`
 
 - **`RolloutCollector`:** steps a `VecEnv` with a `Policy` for *n* steps,
   returns a time-major `Batch`. Owns correct handling of autoreset,
   terminal-observation bookkeeping, and the terminated/truncated distinction.
 - **`ReplayBuffer` protocol** with a uniform ring-buffer implementation
-  first; the interface (`add(batch)`, `sample(n) -> Batch`) is chosen so
-  prioritized replay (sum-tree, importance weights) is a drop-in second
-  implementation (rule of two: scheduled, Milestone 6+).
+  first — built when the first off-policy algorithm needs it, not before.
+  The interface (`add(batch)`, `sample(n) -> Batch`) is chosen so
+  prioritized replay (sum-tree, importance weights) can be a drop-in second
+  implementation later.
 - **Transforms:** pure functions over `Batch` — GAE (Schulman et al., 2016),
-  n-step returns, return normalization. Pure functions here mean invariant
-  tests are trivial (e.g. GAE with λ=1, γ=1 must equal Monte-Carlo returns).
+  n-step returns, return normalization. Pure functions make invariant tests
+  direct. The GAE invariants (corrected from revision 1):
+  - **λ = 0:** the advantage reduces to the one-step TD residual,
+    `Â_t = r_t + γ·V(s_{t+1}) − V(s_t)`.
+  - **λ = 1, any γ:** the sum telescopes, so the advantage equals the
+    discounted Monte-Carlo return minus the value baseline,
+    `Â_t = G_t − V(s_t)` — equivalently, `Â_t + V(s_t)` reproduces the
+    discounted Monte-Carlo return `G_t`. (Revision 1 wrongly claimed the
+    *advantage itself* equals the MC return.)
+  - Both limits are tested against direct reference computation, including
+    bootstrapped values at truncation boundaries.
 
-### 6.5 Training Engine — `rlab.training`
+### 6.5 Training Engine — `rlcore.training`
 
 The single place where the loop lives:
 
@@ -229,12 +254,12 @@ for iteration in ...:
 ```
 
 A **small, fixed set of hook points** (iteration end, eval end, checkpoint
-saved) rather than an open callback bus — callbacks are where frameworks
-accumulate hidden control flow. Anything needing more than these hooks should
-be a different engine (the engine itself is behind a protocol and thus
-replaceable — e.g. a future distributed engine).
+saved) rather than an open callback bus — open callback systems tend to
+accumulate hidden control flow over time. Anything needing more than these
+hooks should be a different engine (the engine itself is behind a protocol
+and thus replaceable — e.g. a future distributed engine).
 
-### 6.6 Evaluation Engine — `rlab.evaluation`
+### 6.6 Evaluation Engine — `rlcore.evaluation`
 
 - Evaluation runs on **separate env instances with fixed eval seeds**, frozen
   normalization statistics, and both deterministic and stochastic action
@@ -243,7 +268,7 @@ replaceable — e.g. a future distributed engine).
   gap, stratified bootstrap CIs, performance profiles. This is what
   "compare algorithms fairly" means operationally.
 
-### 6.7 Experiment Manager — `rlab.experiments`
+### 6.7 Experiment Manager — `rlcore.experiments`
 
 - **Run identity:** every run gets a directory containing the resolved Hydra
   config, git SHA + dirty-diff patch, seed, environment/package versions, and
@@ -251,7 +276,7 @@ replaceable — e.g. a future distributed engine).
   tracker account.
 - **`Tracker` protocol** (`log_scalars`, `log_video`, `log_artifact`, …) with
   three adapters: W&B (primary), MLflow, and an offline JSONL/TensorBoard
-  fallback. The protocol keeps us vendor-independent; W&B is recommended as
+  fallback. The protocol keeps us vendor-independent; W&B is the recommended
   primary for research UX (free academic tier, sweep UI, report sharing).
 
 ### 6.8 Hyperparameter system — Hydra
@@ -260,66 +285,100 @@ replaceable — e.g. a future distributed engine).
   `eval/`, `track/`. Structured configs (dataclasses) so mypy and Hydra both
   validate them; defaults encode *published* hyperparameters with citations
   in comments.
-- Sweeps via Hydra multirun from day one; Optuna sweeper plugin when we reach
-  systematic tuning (Milestone 7).
+- Sweeps via Hydra multirun; Optuna sweeper plugin when we reach systematic
+  tuning (M6).
 
-### 6.9 Checkpoint Manager & Model Registry — `rlab.checkpoints`
+### 6.9 Checkpoint Manager & Model Registry — `rlcore.checkpoints`
 
-- Checkpoints are **complete**: model, optimizer, schedulers, buffer cursor,
-  env normalization statistics, RNG states (torch/numpy/python/env), and
-  step counters. Resume must be bit-exact on CPU; anything less makes
-  preemption-safe cloud training impossible.
-- Atomic writes (write temp, fsync, rename), retention policy (last k +
-  best-by-eval-metric).
-- Registry = a small metadata index (JSON) mapping `(algo, env, config hash)`
-  → best checkpoints, so benchmark tables and "load the best PPO for
-  HalfCheetah" are queries, not folder spelunking.
+Checkpointing is specified as a contract, because incomplete checkpoints are
+the difference between "can resume" and "can resume *exactly*" — and
+preemption-safe cloud training requires the latter. A checkpoint MUST
+contain:
 
-### 6.10 Visualization — `rlab.viz`
+1. **Learner state** — model parameters; optimizer state; LR/entropy/clip
+   schedule states; AMP grad-scaler state when mixed precision is active.
+2. **Algorithm state** — target networks; auxiliary networks; learned
+   temperature/coefficients (e.g. SAC's α); update counters that drive
+   target syncs.
+3. **Data state** — for off-policy runs, the replay buffer *contents* and
+   cursor, not just the cursor. Buffer serialization is the default (exact
+   resume); a documented lightweight mode may omit it, in which case the
+   checkpoint is explicitly marked non-exact. On-policy runs carry no
+   persistent data state.
+4. **Environment state** — observation/reward normalization running
+   statistics; env seed ledger and episode counters. Boundary condition,
+   stated honestly: third-party env internals are generally not
+   serializable, so resume guarantees are defined **at iteration
+   boundaries** — on restore, envs are re-created and re-seeded from the
+   ledger. Mid-episode simulator state is not restored, and the docs say so.
+5. **RNG state** — torch CPU and CUDA generators, numpy, Python `random`,
+   and env/action-space RNGs.
+6. **Progress and identity** — global env step, update count, episode count,
+   wall-clock; the resolved config, git SHA (plus dirty-diff patch), and
+   package versions; the tracker run ID, so logging resumes into the same
+   run rather than forking a new one.
+7. **Format, integrity, portability** — a versioned schema with an explicit
+   migration policy (a checkpoint written by schema version N either loads
+   under N+1 or fails loudly with a clear message — never silently
+   partially-loads); atomic writes (temp file → fsync → rename); a checksum
+   manifest; `map_location`-style cross-device restore (train on GPU,
+   restore on CPU).
+8. **Retention and registry** — last-*k* plus best-by-eval-metric retention;
+   the registry is a small metadata index (JSON) mapping
+   `(algo, env, config hash)` → best checkpoints, so "load the best PPO for
+   HalfCheetah" is a query, not folder spelunking.
+
+**Acceptance test (the definition of "works"):** train for 2N iterations
+continuously; separately train N iterations, checkpoint, restore in a fresh
+process, train N more. On CPU, final weights must be identical for on-policy
+algorithms, and for off-policy algorithms with buffer serialization enabled.
+
+### 6.10 Visualization — `rlcore.viz`
 
 Publication-grade learning curves (mean/IQM with CI bands across seeds) from
 run directories or tracker exports; rollout video recording via the eval
 engine. The W&B dashboard covers interactive monitoring; this module covers
-*paper figures*, which dashboards do badly.
+*paper figures*, which dashboards handle poorly.
 
-### 6.11 Research Module — `rlab.research`
+### 6.11 Research Module — `rlcore.research`
 
-Deliberately the **last** component (Milestone 8): ablation harness (declare a
-base config + a set of deltas, get a full comparison with rliable stats),
+Deliberately the **last** component (M7): ablation harness (declare a base
+config + a set of deltas, get a full comparison with rliable stats),
 algorithm-variant registry. Its shape should be dictated by friction we
 actually experience running studies with the platform — designing it first
 would be speculation.
 
 ## 7. Repository layout
 
+Target layout; directories marked *(later)* are created by the milestone that
+needs them, not up front.
+
 ```
 ai-research-lab/
 ├── pyproject.toml              # single source: deps, ruff, mypy, pytest config
 ├── README.md
-├── LICENSE                     # proposal: Apache-2.0 (see Open Decisions)
+├── LICENSE                     # Apache-2.0
 ├── .github/workflows/ci.yml    # lint → type-check → unit tests (CPU)
-├── .pre-commit-config.yaml
-├── docker/
-│   └── Dockerfile              # CPU dev image now; CUDA variant at Milestone 8
-├── configs/                    # Hydra tree
-│   ├── config.yaml             # root defaults
+├── docker/                     # (later, M6) reproducible benchmark image
+├── configs/                    # Hydra tree (starts minimal at M1)
+│   ├── config.yaml
 │   ├── algo/                   # ppo.yaml, dqn.yaml, sac.yaml, ...
 │   ├── env/                    # cartpole.yaml, halfcheetah.yaml, ...
 │   ├── train/                  # loop settings, schedules
-│   ├── eval/                   # protocols
-│   └── track/                  # wandb.yaml, mlflow.yaml, offline.yaml
-├── src/rlab/
+│   ├── eval/                   # protocols            (later, M4)
+│   └── track/                  # wandb.yaml, ...      (later, M4)
+├── src/rlcore/
 │   ├── types.py                # Batch, PolicyOutput, key constants
 │   ├── envs/                   # factory, wrappers, vector seam, seeding
 │   ├── nets/                   # torsos, heads, distributions, init
-│   ├── data/                   # collector, replay buffers, transforms
-│   ├── agents/                 # base protocols + ppo/, dqn/, sac/, ...
-│   ├── training/               # engine, schedules
-│   ├── evaluation/             # evaluator, rliable-style metrics
-│   ├── experiments/            # run manager, tracker adapters
-│   ├── checkpoints/            # manager, registry
-│   ├── viz/                    # curves, video
-│   └── utils/                  # timers, logging setup, device
+│   ├── data/                   # collector, transforms; replay buffers (later, M5)
+│   ├── agents/                 # base protocols + reinforce/, ppo/, dqn/, sac/
+│   ├── training/               # engine, schedules   (extracted at M3)
+│   ├── evaluation/             # evaluator, metrics  (later, M4)
+│   ├── experiments/            # run manager, trackers (later, M4)
+│   ├── checkpoints/            # manager, registry   (later, M4)
+│   ├── viz/                    # curves, video       (later, M4+)
+│   └── utils/                  # seeding, logging setup
 ├── tests/
 │   ├── unit/                   # shapes, dtypes, gradient flow/blocking
 │   ├── invariants/             # mathematical properties, determinism
@@ -330,18 +389,18 @@ ai-research-lab/
 └── docs/
     ├── ARCHITECTURE.md         # this file
     ├── ROADMAP.md
-    └── design/                 # ADRs for future decisions
+    └── design/                 # ADRs
 ```
 
 Notes:
 
 - **`src/` layout** prevents accidentally importing the working tree instead
   of the installed package — a real class of CI bug.
-- **SB3 is a test-only dependency** (an extras group installed in
-  `tests/parity` contexts), keeping the runtime dependency tree lean and the
-  "verification, not implementation" rule structurally enforced.
-- Package name **`rlab`**: short, importable, matches the repo. Open to
-  alternatives (see Open Decisions).
+- **SB3 is a test-only dependency** (an extras group used by `tests/parity`),
+  keeping the runtime dependency tree lean and the "verification, not
+  implementation" rule structurally enforced.
+- Package name **`rlcore`** — verified free on PyPI (as are the runner-up
+  candidates `rlbase` and `rlfoundry`; `rlab` and `rlforge` are taken).
 
 ## 8. Testing strategy
 
@@ -349,15 +408,16 @@ Ordered from fast/always to slow/scheduled:
 
 1. **Unit tests** — shapes, dtypes, edge cases; gradient *flow* where
    expected and gradient *blocking* where required (e.g. no gradient through
-   target networks or GAE targets).
-2. **Invariant tests** — mathematical properties: GAE(λ=1,γ=1) ≡ Monte-Carlo
-   returns; buffer FIFO semantics; tanh-Gaussian `log_prob` matches numerical
-   change-of-variables; two runs with the same seed produce identical weights
-   after N updates (CPU).
+   target networks or advantage targets).
+2. **Invariant tests** — mathematical properties: the GAE limit identities of
+   §6.4 (λ=0 → TD residual; λ=1 → MC return minus value baseline); buffer
+   FIFO semantics; tanh-Gaussian `log_prob` matches numerical
+   change-of-variables; two runs with the same seed produce identical
+   weights after N updates (CPU).
 3. **Parity tests** — our loss functions vs. SB3's on identical synthetic
-   batches, `allclose` at tight tolerance. Exact, fast, and catches the bugs
+   batches, `allclose` at tight tolerance. Exact, fast, and catches bugs that
    learning curves hide.
-4. **Smoke tests** (`-m slow`) — tiny budget "learns at all" canaries:
+4. **Smoke tests** (`-m slow`) — tiny-budget "learns at all" canaries:
    CartPole above a reward threshold in a few thousand steps. Probabilistic
    by nature, so thresholds are generous and seeds fixed.
 5. **Benchmark suite** (manual/nightly, not CI) — full runs vs. published
@@ -369,23 +429,23 @@ CI runs 1–3 on every push (CPU, minutes); 4 on PRs to main; 5 on demand.
 
 | Risk | Why it's real | Mitigation |
 |---|---|---|
-| **Over-abstraction** | Killed more RL frameworks than bugs have | Rule of two; protocols not base classes; flat algorithm packages; this doc as the reference to push back against |
-| **Silent numerical bugs** | RL fails quietly — wrong code often still learns, just worse | Parity tests vs. SB3; invariant tests; a documented checklist of classic bugs (truncation bootstrapping, normalization leakage, tanh log-prob correction, GAE off-by-one) applied at every algorithm review |
+| **Over-abstraction** | A recurring failure mode in prior RL frameworks | Extract-don't-design policy (§3.3); protocols not base classes; flat algorithm packages; this doc as the reference to push back against |
+| **Silent numerical bugs** | RL often fails quietly — incorrect code can still learn, just worse | Parity tests vs. SB3; invariant tests; a documented checklist of known error classes (truncation bootstrapping, normalization leakage, tanh log-prob correction, GAE indexing) applied at every algorithm review |
 | **Non-reproducibility** | GPU nondeterminism, hidden global RNG state | Central seeding; RNG in checkpoints; CPU determinism as the tested bar; `torch.use_deterministic_algorithms` documented for GPU |
-| **Gymnasium API churn** | v0.29→1.x broke autoreset semantics for many codebases | All Gym touchpoints quarantined in `rlab.envs`; pinned versions; wrapper tests |
-| **Scope creep** | The component list is large and tempting | Phase gates with your approval; Research Module explicitly deferred to last |
+| **Gymnasium API churn** | v0.29→1.x changed autoreset semantics for many codebases | All Gym touchpoints quarantined in `rlcore.envs`; pinned versions; wrapper tests |
+| **Scope creep** | The component list is large and tempting | Phase gates with reviewer approval; algorithms before abstractions; Research Module explicitly deferred to last |
 | **Benchmark compute cost** | Fair comparison needs many seeds | rliable small-sample statistics; tiered env suites (classic control → MuJoCo → Atari); benchmarks decoupled from CI |
-| **Solo-maintainer bus factor** | Open-source release needs onboarding paths | Docs-as-you-go; ADRs for every decision of this kind; examples/ kept runnable |
+| **Solo-maintainer bus factor** | Open-source release needs onboarding paths | Docs-as-you-go; ADRs for decisions of record; examples/ kept runnable |
 
-## 10. Open decisions for review
+## 10. Decisions of record
 
-1. **Package name:** `rlab` (proposed) — or your preference.
-2. **License:** Apache-2.0 (proposed — explicit patent grant matters for a
-   platform meant to host novel methods) vs. MIT (simpler; SB3/TorchRL use it).
-3. **Tracker primary:** W&B (proposed) behind the `Tracker` protocol, with
-   MLflow adapter scheduled — or MLflow-first if self-hosting is a
-   requirement.
-4. **Python/PyTorch floors:** Python ≥ 3.11, PyTorch ≥ 2.2 (proposed).
-5. **`Batch`:** custom implementation (proposed) vs. adopting TensorDict now.
-6. **First algorithm track:** REINFORCE → PPO before DQN (proposed; rationale
-   in ROADMAP §Milestone 4).
+Ratified in the revision-1 review (revisitable via ADR):
+
+1. **Package name:** `rlcore` (renamed from `rlab`, which is taken on PyPI).
+2. **License:** Apache-2.0.
+3. **Tracker:** W&B primary behind the `Tracker` protocol; MLflow adapter
+   scheduled; offline JSONL/TensorBoard fallback always available.
+4. **Floors:** Python ≥ 3.11, PyTorch ≥ 2.2.
+5. **`Batch`:** custom implementation; TensorDict revisited at M7.
+6. **Algorithm order:** REINFORCE → PPO (on-policy) before DQN → SAC
+   (off-policy); abstractions extracted after working implementations exist.
