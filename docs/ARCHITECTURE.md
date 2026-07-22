@@ -35,6 +35,60 @@ Consequences of that choice:
   checkpointing, and data plumbing get built once, tested hard, and then
   trusted — because data-handling bugs in RL are common and often silent.
 
+### 1.1 The two-layer platform
+
+The full system is two connected layers. Everything in §2–§9 of this document
+specifies the **execution layer**; the **research intelligence layer** is a
+later, separately reviewed addition (roadmap M8–M9) that operates *on top of*
+the execution layer's artifacts:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Research intelligence layer (M8–M9)                        │
+│  paper index & notes · research memory · hypothesis and     │
+│  experiment-plan registry · results analysis · reports      │
+│  with evidence & citations · LLM-assisted review/critique   │
+└──────────────────────────┬──────────────────────────────────┘
+              reads runs, configs, metrics, checkpoints
+              writes experiment plans, analyses, reports
+┌──────────────────────────┴──────────────────────────────────┐
+│  Execution layer (M0–M7, this document)                     │
+│  envs · agents · training · buffers · configs ·             │
+│  checkpoints · tracking · statistics · benchmarks           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+The target research flow: *research question → literature review → hypothesis
+→ experiment design → algorithm implementation → training runs → statistical
+analysis → research conclusion → persistent research memory* — where the
+middle segment (implementation → runs → analysis) is exactly what the
+execution layer automates, and the outer segments are what the intelligence
+layer supports.
+
+Two design commitments, made now so the execution layer grows the right
+seams:
+
+1. **Research artifacts are structured data, not prose in a wiki.** Papers,
+   notes, hypotheses, experiment plans, and conclusions get typed schemas and
+   live in the repository (or a database it manages), linked by ID to the
+   runs, configs, and checkpoints that support them. The experiment
+   registry/run-directory design (§6.7) is therefore the junction point
+   between layers, and every run is attributable to a plan and citable in a
+   report.
+2. **Evidence discipline is enforced at the layer boundary.** A report may
+   only claim what its linked runs and statistics support; LLM-assisted
+   components (explanation, critique, literature synthesis, draft analysis)
+   assist a human researcher and must cite their sources — run IDs, paper
+   references — rather than assert from memory. Hypothesis generation and
+   gap identification are human-led with tool support; this is a platform
+   requirement (see Quality Requirements in the project brief), not an
+   aspiration.
+
+The intelligence layer's detailed architecture is deliberately *not*
+specified here — per principle 3 (extract, don't design up front), it binds
+at its own milestone reviews, informed by the research workflows we actually
+run with the execution layer in M1–M7.
+
 ## 2. Lessons from prior art
 
 The design below draws on existing frameworks, all of which are good at what

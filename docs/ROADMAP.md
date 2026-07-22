@@ -39,6 +39,8 @@ Two rules drive the sequence:
 | 5 | **Off-policy: DQN → SAC** | Replay buffer (built now, when needed), target networks, n-step transforms, continuous control; consolidation pass 2 for the off-policy data path | 4 |
 | 6 | **Benchmark & reproduction harness** | Standard eval suites, multi-seed benchmark runs vs. published results, committed results tables, Optuna sweeps, Docker image for reproducible benchmarks | 5 |
 | 7 | **Scale & research module** | CUDA image, multi-GPU/distributed collection seams exercised, ablation harness, model registry maturity; TensorDict decision revisited | 6 |
+| 8 | **Research memory & reporting** | Typed schemas for papers/notes/hypotheses/experiment plans/conclusions, linked by ID to runs and checkpoints; paper index with search; report generator that pulls metrics, statistics, and citations from the run registry | 7 |
+| 9 | **Research intelligence workflows** | LLM-assisted literature synthesis, concept explanation, methodology critique, experiment-design support, and results analysis — operating over the M8 artifacts and the execution layer's data, under the evidence discipline of ARCHITECTURE §1.1 | 8 |
 
 Notes:
 
@@ -58,6 +60,17 @@ Notes:
   mathematical derivation, known weaknesses, comparison to alternatives, and
   an implementation-detail review against the literature (e.g. the PPO
   detail catalogue of Huang et al., ICLR Blog Track 2022).
+- **M8–M9 are the researcher layer** (ARCHITECTURE §1.1): M0–M7 build the
+  execution layer — the experimental engine — and M8–M9 add the research
+  intelligence layer on top of it. They sit last not because they matter
+  least, but because their design should be extracted from real research
+  workflows run on the finished engine, same as the code abstractions. Two
+  seams are grown early on their behalf: the run registry (every run
+  attributable and citable, from M1's first run directory onward) and typed
+  research artifacts at M8. Scope note, stated honestly: LLM-assisted
+  components support literature work, critique, and analysis under strict
+  citation discipline (claims must link to run IDs or references); hypothesis
+  generation and gap identification remain human-led with tool support.
 
 ---
 

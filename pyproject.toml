@@ -1,0 +1,78 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rlcore"
+version = "0.0.1"
+description = "A modular reinforcement learning research platform: legible algorithms on shared, tested infrastructure."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "rlcore contributors" }]
+keywords = ["reinforcement-learning", "research", "pytorch", "gymnasium"]
+dependencies = [
+    "torch>=2.2",
+    "gymnasium>=1.0",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "pytest>=8.0",
+]
+# Verification-only dependency (ARCHITECTURE.md §7): SB3 is used exclusively by
+# tests/parity and must never be imported from src/rlcore.
+parity = [
+    "stable-baselines3>=2.4",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rlcore"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # bugbear
+    "C4",  # comprehensions
+    "SIM", # simplify
+    "RET", # return statements
+    "ANN", # type annotations required
+    "D",   # docstrings required
+    "RUF", # ruff-specific
+    "T20", # no stray print in library code
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["D1"] # tests: docstrings optional, annotations still required
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+pretty = true
+files = ["src", "tests"]
+mypy_path = "src"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "slow: long-running learning canaries (deselect with -m 'not slow')",
+]

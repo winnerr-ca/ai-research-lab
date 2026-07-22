@@ -4,9 +4,15 @@ A modular, open-source platform for reinforcement learning research: implement
 algorithms from scratch, train them on standard environments, compare them
 fairly, and reproduce published results.
 
-> **Status: design phase.** The overall vision is approved and the design is
-> in revision. No implementation code exists yet — start with the documents
-> below.
+> **Status: Phase 0 (scaffolding) in progress.** The architecture and roadmap
+> are approved — start with the documents below.
+
+The platform has two connected layers: an **execution layer** (environments,
+agents, training, buffers, checkpoints, tracking, statistical comparison —
+milestones 0–7) and a **research intelligence layer** built on top of it
+(paper index, research memory, hypothesis and experiment-plan registry,
+evidence-linked reports, LLM-assisted analysis — milestones 8–9). See
+`docs/ARCHITECTURE.md` §1.1 for how the layers connect.
 
 ## Documents
 
