@@ -16,18 +16,16 @@ import argparse
 import dataclasses
 import json
 import logging
-import platform
 import statistics
-import subprocess
 from pathlib import Path
 from typing import Any
 
 import gymnasium as gym
 import torch
 
-import rlcore
-from rlcore.agents.reinforce.rollout import evaluate
 from rlcore.agents.reinforce.train import ReinforceConfig, train
+from rlcore.evaluation import evaluate_policy
+from rlcore.experiments import run_metadata
 
 logger = logging.getLogger("m1_validation")
 
@@ -41,12 +39,11 @@ def run_seed(seed: int) -> dict[str, Any]:
 
     eval_env: gym.Env[Any, Any] = gym.make(config.env_id)
     eval_env.reset(seed=STOCHASTIC_EVAL_SEED_OFFSET + seed)
-    stochastic = evaluate(
+    generator = torch.Generator().manual_seed(STOCHASTIC_EVAL_SEED_OFFSET + seed)
+    stochastic = evaluate_policy(
         eval_env,
-        result.policy,
+        lambda obs: result.policy.act(obs, generator=generator, deterministic=False),
         episodes=config.eval_episodes,
-        deterministic=False,
-        generator=torch.Generator().manual_seed(STOCHASTIC_EVAL_SEED_OFFSET + seed),
     )
     eval_env.close()
 
@@ -78,35 +75,10 @@ def run_seed(seed: int) -> dict[str, Any]:
     return record
 
 
-def git_commit() -> str:
-    """Return the current commit SHA (with ``-dirty`` if the tree has changes).
-
-    A report stamped with a dirty SHA is not reproducible from that commit;
-    the suffix makes that visible instead of silently claiming a clean state.
-    """
-    try:
-        sha = subprocess.run(
-            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
-        ).stdout.strip()
-        status = subprocess.run(
-            ["git", "status", "--porcelain"], capture_output=True, text=True, check=True
-        ).stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return "unknown"
-    return f"{sha}-dirty" if status else sha
-
-
 def write_report(records: list[dict[str, Any]], config: ReinforceConfig, out_dir: Path) -> Path:
     """Write the JSON record and Markdown report; return the report path."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    environment = {
-        "rlcore": rlcore.__version__,
-        "python": platform.python_version(),
-        "torch": torch.__version__,
-        "gymnasium": gym.__version__,
-        "platform": platform.platform(),
-        "commit": git_commit(),
-    }
+    environment = run_metadata()
     (out_dir / "m1_reinforce_cartpole.json").write_text(
         json.dumps(
             {"config": dataclasses.asdict(config), "environment": environment, "runs": records},

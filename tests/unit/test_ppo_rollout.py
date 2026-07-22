@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import copy
-
 import pytest
 import torch
 
 from rlcore._testing import ScriptedEnv
 from rlcore.agents.ppo.model import ActorCritic
-from rlcore.agents.ppo.rollout import RolloutCollector, evaluate
+from rlcore.agents.ppo.rollout import RolloutCollector
 
 
 def make_model() -> ActorCritic:
@@ -104,24 +102,3 @@ class TestCollect:
     def test_rejects_zero_steps(self) -> None:
         with pytest.raises(ValueError, match=">= 1"):
             RolloutCollector(ScriptedEnv([1.0])).collect(make_model(), 0)
-
-
-class TestEvaluate:
-    def test_returns_and_no_side_effects(self) -> None:
-        model = make_model()
-        before = copy.deepcopy(model.state_dict())
-        stats = evaluate(ScriptedEnv([1.0, 2.0, 3.0]), model, episodes=3)
-        assert stats.episode_returns == (6.0, 6.0, 6.0)
-        assert stats.episode_lengths == (3, 3, 3)
-        for key, value in model.state_dict().items():
-            assert torch.equal(value, before[key])
-
-    def test_greedy_eval_consumes_no_rng(self) -> None:
-        generator = torch.Generator().manual_seed(0)
-        state_before = generator.get_state()
-        evaluate(ScriptedEnv([1.0, 1.0]), make_model(), episodes=2, generator=generator)
-        assert torch.equal(generator.get_state(), state_before)
-
-    def test_rejects_zero_episodes(self) -> None:
-        with pytest.raises(ValueError, match=">= 1"):
-            evaluate(ScriptedEnv([1.0]), make_model(), episodes=0)

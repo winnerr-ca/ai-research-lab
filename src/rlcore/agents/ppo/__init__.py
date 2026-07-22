@@ -9,14 +9,18 @@ M3 from this code and REINFORCE's. Derivation and analysis:
 """
 
 from rlcore.agents.ppo.gae import compute_gae
-from rlcore.agents.ppo.loss import approx_kl_divergence, clipped_surrogate_loss, value_mse_loss
+from rlcore.agents.ppo.loss import (
+    approx_kl_divergence,
+    clipped_surrogate_loss,
+    explained_variance,
+    value_mse_loss,
+)
 from rlcore.agents.ppo.model import ActorCritic
-from rlcore.agents.ppo.rollout import EvalStats, Rollout, RolloutCollector, evaluate
+from rlcore.agents.ppo.rollout import Rollout, RolloutCollector
 from rlcore.agents.ppo.train import PpoConfig, TrainResult, ppo_update, train
 
 __all__ = [
     "ActorCritic",
-    "EvalStats",
     "PpoConfig",
     "Rollout",
     "RolloutCollector",
@@ -24,7 +28,7 @@ __all__ = [
     "approx_kl_divergence",
     "clipped_surrogate_loss",
     "compute_gae",
-    "evaluate",
+    "explained_variance",
     "ppo_update",
     "train",
     "value_mse_loss",

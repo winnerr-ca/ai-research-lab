@@ -7,7 +7,12 @@ import math
 import pytest
 import torch
 
-from rlcore.agents.ppo.loss import approx_kl_divergence, clipped_surrogate_loss, value_mse_loss
+from rlcore.agents.ppo.loss import (
+    approx_kl_divergence,
+    clipped_surrogate_loss,
+    explained_variance,
+    value_mse_loss,
+)
 
 
 def log_probs_with_ratios(ratios: list[float]) -> tuple[torch.Tensor, torch.Tensor]:
@@ -71,6 +76,32 @@ class TestValueLoss:
     def test_rejects_grad_targets(self) -> None:
         with pytest.raises(ValueError, match="not require grad"):
             value_mse_loss(torch.ones(2), torch.ones(2, requires_grad=True))
+
+
+class TestExplainedVariance:
+    def test_perfect_prediction_is_one(self) -> None:
+        targets = torch.tensor([1.0, 2.0, 3.0])
+        assert explained_variance(targets.clone(), targets) == 1.0
+
+    def test_mean_predictor_is_zero(self) -> None:
+        targets = torch.tensor([1.0, 2.0, 3.0])
+        predictions = torch.full((3,), 2.0)
+        assert explained_variance(predictions, targets) == 0.0
+
+    def test_worse_than_mean_is_negative(self) -> None:
+        targets = torch.tensor([1.0, 2.0, 3.0])
+        predictions = torch.tensor([3.0, 2.0, 1.0])
+        assert explained_variance(predictions, targets) < 0.0
+
+    def test_constant_targets_are_nan(self) -> None:
+        result = explained_variance(torch.zeros(3), torch.ones(3))
+        assert result != result  # nan
+
+    def test_hand_computed_value(self) -> None:
+        # targets var (population) = 2/3; residuals [0.5, 0, -0.5] var = 1/6.
+        targets = torch.tensor([1.0, 2.0, 3.0])
+        predictions = torch.tensor([0.5, 2.0, 3.5])
+        assert explained_variance(predictions, targets) == pytest.approx(1.0 - (1 / 6) / (2 / 3))
 
 
 class TestApproxKl:

@@ -1,17 +1,21 @@
 """Concrete categorical MLP policy for discrete action spaces.
 
-Every operation is kept visible — explicit ``log_softmax``, ``gather``, and
-``multinomial`` — rather than routed through ``torch.distributions`` or a
-shared network library; those arrive at M3 by extraction.
+Network construction and log-prob/entropy math are shared via
+:mod:`rlcore.nets` (M3 extraction). Action *sampling* stays local: this
+policy samples from ``softmax(logits)`` while PPO samples from
+``exp(log_softmax(logits))`` — equal in exact arithmetic but not bitwise,
+so unifying them would alter seeded RNG-draw streams (see the audit,
+``docs/design/m3-consolidation-audit.md``).
 """
 
 from __future__ import annotations
 
-import math
 from typing import TYPE_CHECKING
 
 import torch
 from torch import Tensor, nn
+
+from rlcore.nets import build_mlp, entropy_from_log_probs, gather_log_prob
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -20,10 +24,8 @@ if TYPE_CHECKING:
 class CategoricalMlpPolicy(nn.Module):
     """An MLP mapping flat observations to action logits.
 
-    Hidden layers use tanh activations. Weights use orthogonal initialization
-    with gain sqrt(2) for hidden layers and 0.01 for the output layer, the
-    empirically supported default for on-policy policy gradients
-    (Engstrom et al., ICLR 2020; Huang et al., ICLR Blog Track 2022).
+    Tanh hidden layers; orthogonal initialization with gain sqrt(2) hidden
+    and 0.01 output (see :func:`rlcore.nets.build_mlp` for provenance).
 
     Args:
         obs_dim: Size of the flat observation vector.
@@ -37,20 +39,7 @@ class CategoricalMlpPolicy(nn.Module):
     ) -> None:
         """Build the network and apply orthogonal initialization."""
         super().__init__()
-        layers: list[nn.Module] = []
-        in_dim = obs_dim
-        for size in hidden_sizes:
-            layers += [nn.Linear(in_dim, size), nn.Tanh()]
-            in_dim = size
-        layers.append(nn.Linear(in_dim, n_actions))
-        self.net = nn.Sequential(*layers)
-
-        linear_layers = [m for m in self.net if isinstance(m, nn.Linear)]
-        for layer in linear_layers[:-1]:
-            nn.init.orthogonal_(layer.weight, gain=math.sqrt(2.0))
-            nn.init.zeros_(layer.bias)
-        nn.init.orthogonal_(linear_layers[-1].weight, gain=0.01)
-        nn.init.zeros_(linear_layers[-1].bias)
+        self.net = build_mlp(obs_dim, hidden_sizes, n_actions, final_gain=0.01)
 
     def forward(self, obs: Tensor) -> Tensor:
         """Return action logits of shape ``[batch, n_actions]``."""
@@ -68,12 +57,11 @@ class CategoricalMlpPolicy(nn.Module):
             obs: Observations, ``[batch, obs_dim]``.
             action: Taken actions, ``[batch]`` int64.
         """
-        return self.log_probs(obs).gather(1, action.unsqueeze(1)).squeeze(1)
+        return gather_log_prob(self.log_probs(obs), action)
 
     def entropy(self, obs: Tensor) -> Tensor:
         """Return the policy entropy per observation, shape ``[batch]``."""
-        log_probs = self.log_probs(obs)
-        return -(log_probs.exp() * log_probs).sum(dim=-1)
+        return entropy_from_log_probs(self.log_probs(obs))
 
     @torch.no_grad()
     def act(

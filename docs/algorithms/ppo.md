@@ -84,6 +84,18 @@ heuristic* — same-batch statistics can introduce finite-batch bias, and the
 std division rescales the effective step size. It is not part of the PPO
 derivation.
 
+**Gradient clipping — stated precisely:** global gradient-norm clipping IS
+implemented (`max_grad_norm = 0.5`, SB3's default), applied before every
+optimizer step, and covered by a unit test that the applied gradients are
+norm-bounded. The logged `grad_norm` diagnostic is the *pre-clip* norm
+(what `clip_grad_norm_` returns). REINFORCE (M1) does *not* clip — its
+`grad_norm` metric is measurement only.
+
+**Explained variance** (diagnostic, logged per update): the value function's
+fit to its targets, ``1 − Var[target − prediction] / Var[target]`` — 1 is a
+perfect fit, 0 matches a constant mean predictor, negative is worse than
+that. A persistently low value flags a critic that GAE cannot lean on.
+
 ## 6. Approximate-KL monitoring
 
 Multiple epochs over one rollout are exactly the regime where π_θ can drift

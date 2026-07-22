@@ -2,10 +2,10 @@
 
 PPO collects a fixed number of env steps per update, crossing episode
 boundaries; the collector is stateful so partial episodes continue into the
-next rollout. It is deliberately PPO-specific and single-env — the shared
-collector abstraction is an M3 extraction, and the evaluation helpers here
-intentionally duplicate M1's (two concrete implementations are exactly what
-M3 needs to extract from).
+next rollout. It is deliberately PPO-specific and single-env: the M3 audit
+kept fixed-horizon collection local (it shares no stable common structure
+with REINFORCE's episodic collection). Evaluation moved to
+:mod:`rlcore.evaluation` at M3.
 
 The collector also owns the ``next_values`` bootstrap contract consumed by
 :func:`rlcore.agents.ppo.gae.compute_gae`: 0 at true terminals, the value of
@@ -15,7 +15,6 @@ successor state otherwise.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -152,65 +151,3 @@ class RolloutCollector:
             next_value=torch.as_tensor(filled, dtype=torch.float32),
         )
         return Rollout(batch=batch, completed_returns=tuple(completed))
-
-
-@dataclass(frozen=True, slots=True)
-class EvalStats:
-    """Aggregate statistics over evaluation episodes (PPO-local; see module).
-
-    Attributes:
-        episode_returns: Undiscounted return of each evaluation episode.
-        episode_lengths: Length (steps) of each evaluation episode.
-    """
-
-    episode_returns: tuple[float, ...]
-    episode_lengths: tuple[int, ...]
-
-    @property
-    def mean_return(self) -> float:
-        """Mean undiscounted episode return."""
-        return sum(self.episode_returns) / len(self.episode_returns)
-
-    @property
-    def std_return(self) -> float:
-        """Population standard deviation of episode returns."""
-        mean = self.mean_return
-        return math.sqrt(
-            sum((r - mean) ** 2 for r in self.episode_returns) / len(self.episode_returns)
-        )
-
-
-def evaluate(
-    env: gym.Env[Any, Any],
-    model: ActorCritic,
-    *,
-    episodes: int,
-    deterministic: bool = True,
-    generator: torch.Generator | None = None,
-) -> EvalStats:
-    """Run full evaluation episodes; parameters are only read, never written.
-
-    Use a dedicated env instance so evaluation never perturbs training env
-    RNG streams. Greedy and stochastic modes answer different questions and
-    are reported separately in validation.
-
-    Raises:
-        ValueError: If ``episodes < 1``.
-    """
-    if episodes < 1:
-        raise ValueError(f"episodes must be >= 1, got {episodes}.")
-    returns: list[float] = []
-    lengths: list[int] = []
-    for _ in range(episodes):
-        obs, _ = env.reset()
-        episode_return, length = 0.0, 0
-        terminated = truncated = False
-        while not (terminated or truncated):
-            obs_t = torch.as_tensor(obs, dtype=torch.float32).unsqueeze(0)
-            action_t, _, _ = model.act(obs_t, generator=generator, deterministic=deterministic)
-            obs, reward, terminated, truncated, _ = env.step(int(action_t.item()))
-            episode_return += float(reward)
-            length += 1
-        returns.append(episode_return)
-        lengths.append(length)
-    return EvalStats(episode_returns=tuple(returns), episode_lengths=tuple(lengths))

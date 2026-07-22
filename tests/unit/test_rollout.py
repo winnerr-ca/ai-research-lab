@@ -1,15 +1,12 @@
-"""Tests for episode collection and evaluation on scripted environments."""
+"""Tests for REINFORCE episode collection on scripted environments."""
 
 from __future__ import annotations
 
-import copy
-
-import pytest
 import torch
 
 from rlcore._testing import ScriptedEnv
 from rlcore.agents.reinforce.policy import CategoricalMlpPolicy
-from rlcore.agents.reinforce.rollout import EvalStats, collect_episode, evaluate
+from rlcore.agents.reinforce.rollout import collect_episode
 
 
 def make_policy() -> CategoricalMlpPolicy:
@@ -64,36 +61,3 @@ class TestCollectEpisode:
             ScriptedEnv([1.0] * 8), policy, generator=torch.Generator().manual_seed(5)
         )
         assert torch.equal(first.action, second.action)
-
-
-class TestEvaluate:
-    def test_returns_and_lengths(self) -> None:
-        stats = evaluate(ScriptedEnv([1.0, 2.0, 3.0]), make_policy(), episodes=3)
-        assert stats.episode_returns == (6.0, 6.0, 6.0)
-        assert stats.episode_lengths == (3, 3, 3)
-
-    def test_does_not_modify_policy(self) -> None:
-        policy = make_policy()
-        before = copy.deepcopy(policy.state_dict())
-        evaluate(ScriptedEnv([1.0, 1.0]), policy, episodes=2)
-        for key, value in policy.state_dict().items():
-            assert torch.equal(value, before[key])
-
-    def test_greedy_eval_consumes_no_rng(self) -> None:
-        generator = torch.Generator().manual_seed(0)
-        state_before = generator.get_state()
-        evaluate(ScriptedEnv([1.0, 1.0]), make_policy(), episodes=2, generator=generator)
-        assert torch.equal(generator.get_state(), state_before)
-
-    def test_rejects_zero_episodes(self) -> None:
-        with pytest.raises(ValueError, match=">= 1"):
-            evaluate(ScriptedEnv([1.0]), make_policy(), episodes=0)
-
-
-class TestEvalStats:
-    def test_aggregates(self) -> None:
-        stats = EvalStats(episode_returns=(1.0, 3.0), episode_lengths=(1, 3))
-        assert stats.mean_return == 2.0
-        assert stats.std_return == 1.0
-        assert stats.min_return == 1.0
-        assert stats.max_return == 3.0

@@ -88,6 +88,38 @@ class TestPpoUpdate:
         for key, value in metrics.items():
             assert torch.isfinite(torch.tensor(value)), key
 
+    def test_gradient_norm_clipping_is_applied(self) -> None:
+        """The gradients the optimizer applies are norm-bounded by max_grad_norm.
+
+        The reported ``grad_norm`` metric is the PRE-clip norm (what
+        ``clip_grad_norm_`` returns), so it may exceed the bound; the
+        gradients left on the parameters after the update must not.
+        """
+        model = make_model()
+        data = make_data(model)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        max_grad_norm = 1e-3
+        metrics = ppo_update(
+            model,
+            optimizer,
+            data,
+            n_epochs=1,
+            minibatch_size=len(data),
+            clip_range=0.2,
+            vf_coef=0.5,
+            ent_coef=0.0,
+            max_grad_norm=max_grad_norm,
+            normalize_advantages=True,
+            target_kl=None,
+            generator=torch.Generator().manual_seed(0),
+        )
+        squares = [
+            param.grad.pow(2).sum() for param in model.parameters() if param.grad is not None
+        ]
+        applied_norm = torch.sqrt(torch.stack(squares).sum())
+        assert float(applied_norm) <= max_grad_norm * (1.0 + 1e-4)
+        assert metrics["grad_norm"] >= float(applied_norm)  # metric is pre-clip
+
     def test_target_kl_stops_epochs(self) -> None:
         """A forced KL breach stops the epochs after exactly one minibatch.
 

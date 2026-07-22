@@ -9,17 +9,15 @@ at M3, from this code and PPO's. Derivation and analysis:
 
 from rlcore.agents.reinforce.policy import CategoricalMlpPolicy
 from rlcore.agents.reinforce.returns import discounted_returns
-from rlcore.agents.reinforce.rollout import EvalStats, collect_episode, evaluate
+from rlcore.agents.reinforce.rollout import collect_episode
 from rlcore.agents.reinforce.train import ReinforceConfig, TrainResult, reinforce_update, train
 
 __all__ = [
     "CategoricalMlpPolicy",
-    "EvalStats",
     "ReinforceConfig",
     "TrainResult",
     "collect_episode",
     "discounted_returns",
-    "evaluate",
     "reinforce_update",
     "train",
 ]

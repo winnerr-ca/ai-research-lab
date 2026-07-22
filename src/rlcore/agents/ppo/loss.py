@@ -73,6 +73,25 @@ def value_mse_loss(values: Tensor, value_targets: Tensor) -> Tensor:
     return F.mse_loss(values, value_targets)
 
 
+def explained_variance(values: Tensor, value_targets: Tensor) -> float:
+    """Diagnostic: how much of the targets' variance the critic explains.
+
+    ``1 - Var[target - prediction] / Var[target]`` (population variance):
+    1 is a perfect fit, 0 matches a constant mean predictor, negative is
+    worse than that. Purely observational — never part of any loss.
+
+    Returns:
+        The scalar diagnostic; ``nan`` when the targets have zero variance
+        (the ratio is undefined there).
+    """
+    with torch.no_grad():
+        target_var = float(value_targets.var(correction=0).item())
+        if target_var == 0.0:
+            return float("nan")
+        residual_var = float((value_targets - values).var(correction=0).item())
+        return 1.0 - residual_var / target_var
+
+
 def approx_kl_divergence(new_log_prob: Tensor, old_log_prob: Tensor) -> Tensor:
     """Monitor-grade approximation of ``KL(old || new)`` from sampled actions.
 

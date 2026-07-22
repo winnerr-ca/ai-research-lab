@@ -13,24 +13,24 @@ Derivation, bias/variance discussion, and known weaknesses:
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-import gymnasium as gym
 import hydra
 import torch
-from gymnasium import spaces
 from hydra.core.config_store import ConfigStore
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import OmegaConf
 
 from rlcore.agents.reinforce.policy import CategoricalMlpPolicy
 from rlcore.agents.reinforce.returns import discounted_returns
-from rlcore.agents.reinforce.rollout import EvalStats, collect_episode, evaluate
+from rlcore.agents.reinforce.rollout import collect_episode
+from rlcore.envs import make_discrete_env_pair
+from rlcore.evaluation import EvalStats, evaluate_policy
+from rlcore.experiments import write_run_outputs
 from rlcore.utils.seeding import seed_everything
 
 if TYPE_CHECKING:
@@ -181,26 +181,9 @@ def train(config: ReinforceConfig, out_dir: Path | None = None) -> TrainResult:
     """
     start = time.perf_counter()
     rng = seed_everything(config.seed)
-
-    env: gym.Env[Any, Any] = gym.make(config.env_id)
-    eval_env: gym.Env[Any, Any] = gym.make(config.env_id)
-    env.reset(seed=rng.child_seed(0))
-    env.action_space.seed(rng.child_seed(1))
-    eval_env.reset(seed=rng.child_seed(2))
-
-    obs_space = env.observation_space
-    act_space = env.action_space
-    if (
-        not isinstance(obs_space, spaces.Box)
-        or obs_space.shape is None
-        or len(obs_space.shape) != 1
-    ):
-        raise ValueError(f"REINFORCE (M1) needs a flat Box observation space, got {obs_space}.")
-    if not isinstance(act_space, spaces.Discrete):
-        raise ValueError(f"REINFORCE (M1) needs a Discrete action space, got {act_space}.")
-    policy = CategoricalMlpPolicy(
-        int(obs_space.shape[0]), int(act_space.n), hidden_sizes=config.hidden_sizes
-    )
+    envs = make_discrete_env_pair(config.env_id, rng)
+    env = envs.train_env
+    policy = CategoricalMlpPolicy(envs.obs_dim, envs.n_actions, hidden_sizes=config.hidden_sizes)
     optimizer = torch.optim.Adam(policy.parameters(), lr=config.lr)
 
     history: list[dict[str, float]] = []
@@ -230,7 +213,11 @@ def train(config: ReinforceConfig, out_dir: Path | None = None) -> TrainResult:
         }
 
         if config.eval_every > 0 and update % config.eval_every == 0:
-            stats = evaluate(eval_env, policy, episodes=config.eval_episodes, deterministic=True)
+            stats = evaluate_policy(
+                envs.eval_env,
+                lambda obs: policy.act(obs, deterministic=True),
+                episodes=config.eval_episodes,
+            )
             entry["eval_return_mean"] = stats.mean_return
             entry["eval_return_std"] = stats.std_return
             logger.info(
@@ -256,7 +243,11 @@ def train(config: ReinforceConfig, out_dir: Path | None = None) -> TrainResult:
             )
         history.append(entry)
 
-    final_eval = evaluate(eval_env, policy, episodes=config.eval_episodes, deterministic=True)
+    final_eval = evaluate_policy(
+        envs.eval_env,
+        lambda obs: policy.act(obs, deterministic=True),
+        episodes=config.eval_episodes,
+    )
     result = TrainResult(
         policy=policy,
         final_eval=final_eval,
@@ -266,28 +257,22 @@ def train(config: ReinforceConfig, out_dir: Path | None = None) -> TrainResult:
         stopped_early=stopped_early,
         wall_time_s=time.perf_counter() - start,
     )
-    env.close()
-    eval_env.close()
+    envs.close()
 
     if out_dir is not None:
-        out_dir.mkdir(parents=True, exist_ok=True)
-        (out_dir / "config.yaml").write_text(OmegaConf.to_yaml(OmegaConf.structured(config)))
-        with (out_dir / "metrics.jsonl").open("w") as stream:
-            for entry in history:
-                stream.write(json.dumps(entry) + "\n")
-        (out_dir / "result.json").write_text(
-            json.dumps(
-                {
-                    "final_eval_return_mean": final_eval.mean_return,
-                    "final_eval_return_std": final_eval.std_return,
-                    "final_eval_returns": list(final_eval.episode_returns),
-                    "total_env_steps": total_env_steps,
-                    "total_episodes": total_episodes,
-                    "stopped_early": stopped_early,
-                    "wall_time_s": result.wall_time_s,
-                },
-                indent=2,
-            )
+        write_run_outputs(
+            out_dir,
+            config,
+            history,
+            {
+                "final_eval_return_mean": final_eval.mean_return,
+                "final_eval_return_std": final_eval.std_return,
+                "final_eval_returns": list(final_eval.episode_returns),
+                "total_env_steps": total_env_steps,
+                "total_episodes": total_episodes,
+                "stopped_early": stopped_early,
+                "wall_time_s": result.wall_time_s,
+            },
         )
     return result
 

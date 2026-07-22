@@ -1,16 +1,15 @@
-"""Single-environment episode collection and evaluation.
+"""Single-environment episode collection.
 
 Deliberately minimal: one Gymnasium env, sequential episodes, no
-vectorization and no collector abstraction (excluded from M1 by design;
-extracted at M3). Collection runs the policy under ``no_grad`` and stores
-observations/actions; log-probabilities are recomputed differentiably at
-update time from the same (not-yet-updated) network.
+vectorization and no collector abstraction (the M3 audit kept episodic
+collection local; evaluation moved to :mod:`rlcore.evaluation`). Collection
+runs the policy under ``no_grad`` and stores observations/actions;
+log-probabilities are recomputed differentiably at update time from the
+same (not-yet-updated) network.
 """
 
 from __future__ import annotations
 
-import math
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -78,78 +77,4 @@ def collect_episode(
         reward=torch.as_tensor(rewards, dtype=torch.float32),
         terminated=terminated_flags,
         truncated=truncated_flags,
-    )
-
-
-@dataclass(frozen=True, slots=True)
-class EvalStats:
-    """Aggregate statistics over evaluation episodes.
-
-    Attributes:
-        episode_returns: Undiscounted return of each evaluation episode.
-        episode_lengths: Length (steps) of each evaluation episode.
-    """
-
-    episode_returns: tuple[float, ...]
-    episode_lengths: tuple[int, ...]
-
-    @property
-    def mean_return(self) -> float:
-        """Mean undiscounted episode return."""
-        return sum(self.episode_returns) / len(self.episode_returns)
-
-    @property
-    def std_return(self) -> float:
-        """Population standard deviation of episode returns."""
-        mean = self.mean_return
-        return math.sqrt(
-            sum((r - mean) ** 2 for r in self.episode_returns) / len(self.episode_returns)
-        )
-
-    @property
-    def min_return(self) -> float:
-        """Smallest episode return."""
-        return min(self.episode_returns)
-
-    @property
-    def max_return(self) -> float:
-        """Largest episode return."""
-        return max(self.episode_returns)
-
-
-def evaluate(
-    env: gym.Env[Any, Any],
-    policy: CategoricalMlpPolicy,
-    *,
-    episodes: int,
-    deterministic: bool = True,
-    generator: torch.Generator | None = None,
-) -> EvalStats:
-    """Run evaluation episodes and report undiscounted returns.
-
-    Evaluation only reads the policy — parameters are untouched — and should
-    use a dedicated env instance (with its own seed stream) so it never
-    perturbs the training env's RNG. Greedy (``deterministic=True``) and
-    stochastic evaluation answer different questions; the M1 validation
-    report shows both.
-
-    Args:
-        env: Dedicated evaluation env.
-        policy: Policy to evaluate.
-        episodes: Number of episodes, >= 1.
-        deterministic: Greedy actions (no RNG consumed) if ``True``.
-        generator: RNG stream for stochastic evaluation.
-
-    Raises:
-        ValueError: If ``episodes < 1``.
-    """
-    if episodes < 1:
-        raise ValueError(f"episodes must be >= 1, got {episodes}.")
-    collected = [
-        collect_episode(env, policy, generator=generator, deterministic=deterministic)
-        for _ in range(episodes)
-    ]
-    return EvalStats(
-        episode_returns=tuple(float(ep.reward.sum().item()) for ep in collected),
-        episode_lengths=tuple(len(ep) for ep in collected),
     )

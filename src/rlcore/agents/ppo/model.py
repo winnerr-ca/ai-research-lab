@@ -9,32 +9,15 @@ library arrives at M3 by extraction.
 
 from __future__ import annotations
 
-import math
 from typing import TYPE_CHECKING
 
 import torch
 from torch import Tensor, nn
 
+from rlcore.nets import build_mlp, entropy_from_log_probs, gather_log_prob
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
-
-
-def _mlp(
-    in_dim: int, hidden_sizes: Sequence[int], out_dim: int, final_gain: float
-) -> nn.Sequential:
-    """Build a tanh MLP with orthogonal init (hidden gain sqrt(2))."""
-    layers: list[nn.Module] = []
-    for size in hidden_sizes:
-        layers += [nn.Linear(in_dim, size), nn.Tanh()]
-        in_dim = size
-    layers.append(nn.Linear(in_dim, out_dim))
-    linear_layers = [m for m in layers if isinstance(m, nn.Linear)]
-    for layer in linear_layers[:-1]:
-        nn.init.orthogonal_(layer.weight, gain=math.sqrt(2.0))
-        nn.init.zeros_(layer.bias)
-    nn.init.orthogonal_(linear_layers[-1].weight, gain=final_gain)
-    nn.init.zeros_(linear_layers[-1].bias)
-    return nn.Sequential(*layers)
 
 
 class ActorCritic(nn.Module):
@@ -56,8 +39,8 @@ class ActorCritic(nn.Module):
     ) -> None:
         """Build policy and value networks with orthogonal initialization."""
         super().__init__()
-        self.policy_net = _mlp(obs_dim, hidden_sizes, n_actions, final_gain=0.01)
-        self.value_net = _mlp(obs_dim, hidden_sizes, 1, final_gain=1.0)
+        self.policy_net = build_mlp(obs_dim, hidden_sizes, n_actions, final_gain=0.01)
+        self.value_net = build_mlp(obs_dim, hidden_sizes, 1, final_gain=1.0)
 
     def logits(self, obs: Tensor) -> Tensor:
         """Return action logits of shape ``[batch, n_actions]``."""
@@ -77,8 +60,8 @@ class ActorCritic(nn.Module):
             action: Taken actions, ``[batch]`` int64.
         """
         log_probs = self.logits(obs).log_softmax(dim=-1)
-        log_prob = log_probs.gather(1, action.unsqueeze(1)).squeeze(1)
-        entropy = -(log_probs.exp() * log_probs).sum(dim=-1)
+        log_prob = gather_log_prob(log_probs, action)
+        entropy = entropy_from_log_probs(log_probs)
         return log_prob, entropy, self.value(obs)
 
     @torch.no_grad()
@@ -109,5 +92,4 @@ class ActorCritic(nn.Module):
             action = torch.multinomial(log_probs.exp(), num_samples=1, generator=generator).squeeze(
                 -1
             )
-        log_prob = log_probs.gather(1, action.unsqueeze(1)).squeeze(1)
-        return action, log_prob, self.value(obs)
+        return action, gather_log_prob(log_probs, action), self.value(obs)
