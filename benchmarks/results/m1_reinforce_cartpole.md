@@ -59,17 +59,17 @@ configuration, and the environment recorded below is intended.
 - torch: `2.13.0+cu130`
 - gymnasium: `1.3.0`
 - platform: `Linux-6.18.5-x86_64-with-glibc2.39`
-- commit: `40776403e353f564e60a50ed0115dcc53825a79c`
+- commit: `b697fc27ccd0101fced44d864e3ef8c000185c47`
 
 ## Per-seed results
 
 | Seed | Episodes | Env steps | Wall time (s) | Stopped early | Greedy eval (mean±std) | Stochastic eval (mean±std) |
 |---|---|---|---|---|---|---|
-| 0 | 400 | 100960 | 28.4 | yes | 500.0 ± 0.0 | 495.3 ± 20.5 |
-| 1 | 400 | 95415 | 25.4 | yes | 500.0 ± 0.0 | 500.0 ± 0.0 |
-| 2 | 400 | 98012 | 26.8 | yes | 500.0 ± 0.0 | 500.0 ± 0.0 |
-| 3 | 400 | 73466 | 19.3 | yes | 492.9 ± 16.7 | 500.0 ± 0.0 |
-| 4 | 200 | 17410 | 6.5 | yes | 500.0 ± 0.0 | 383.6 ± 125.0 |
+| 0 | 400 | 100960 | 12.6 | yes | 500.0 ± 0.0 | 495.3 ± 20.5 |
+| 1 | 400 | 95415 | 11.0 | yes | 500.0 ± 0.0 | 500.0 ± 0.0 |
+| 2 | 400 | 98012 | 10.9 | yes | 500.0 ± 0.0 | 500.0 ± 0.0 |
+| 3 | 400 | 73466 | 8.9 | yes | 492.9 ± 16.7 | 500.0 ± 0.0 |
+| 4 | 200 | 17410 | 2.7 | yes | 500.0 ± 0.0 | 383.6 ± 125.0 |
 
 ## Aggregate (greedy eval means across seeds)
 

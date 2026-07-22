@@ -29,7 +29,7 @@
     "torch": "2.13.0+cu130",
     "gymnasium": "1.3.0",
     "platform": "Linux-6.18.5-x86_64-with-glibc2.39",
-    "commit": "92bd0c72f03b53e531382084ccd8e8b2e1debec0"
+    "commit": "b697fc27ccd0101fced44d864e3ef8c000185c47-dirty"
   },
   "runs": [
     {
@@ -37,7 +37,7 @@
       "stopped_early": true,
       "updates_used": 10,
       "total_env_steps": 20480,
-      "wall_time_s": 24.5,
+      "wall_time_s": 14.1,
       "greedy_return_mean": 500.0,
       "greedy_return_std": 0.0,
       "greedy_returns": [
@@ -94,7 +94,7 @@
       "stopped_early": true,
       "updates_used": 10,
       "total_env_steps": 20480,
-      "wall_time_s": 23.5,
+      "wall_time_s": 13.4,
       "greedy_return_mean": 500.0,
       "greedy_return_std": 0.0,
       "greedy_returns": [
@@ -151,7 +151,7 @@
       "stopped_early": true,
       "updates_used": 5,
       "total_env_steps": 10240,
-      "wall_time_s": 12.8,
+      "wall_time_s": 7.6,
       "greedy_return_mean": 481.4,
       "greedy_return_std": 36.21933185468775,
       "greedy_returns": [
@@ -208,7 +208,7 @@
       "stopped_early": true,
       "updates_used": 10,
       "total_env_steps": 20480,
-      "wall_time_s": 23.5,
+      "wall_time_s": 12.9,
       "greedy_return_mean": 500.0,
       "greedy_return_std": 0.0,
       "greedy_returns": [
@@ -265,7 +265,7 @@
       "stopped_early": true,
       "updates_used": 10,
       "total_env_steps": 20480,
-      "wall_time_s": 22.8,
+      "wall_time_s": 13.9,
       "greedy_return_mean": 500.0,
       "greedy_return_std": 0.0,
       "greedy_returns": [
