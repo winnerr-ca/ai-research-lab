@@ -177,3 +177,4 @@ states what was actually done and why.
 | 6 | done | `m6-sac.md` | `m6_sac.*` (Pendulum 4/5 auto-α seeds; miss reported) |
 | 7 | done | `m7-benchmarks.md` | `m7_benchmark.*` (12/12 cells ok, clean commit) |
 | 8 | done | `m8-scale-out.md` | `m8_throughput.*` (measured; vectorization honestly not a speedup at this scale), `m8_docker.md` (container build blocked by env network policy — recorded) |
+| 9 | done | `m9-research-layer.md` | `m9_research_demo.*` (real 2x2 ablation, gates demonstrably enforced, MockProvider only) |
