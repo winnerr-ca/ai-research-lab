@@ -41,6 +41,10 @@ rlcore-train algo=reinforce algo.seed=3 algo.lr=0.005
 
 # Re-evaluate a finished run from its run directory
 rlcore-evaluate outputs/<date>/<time>/ --episodes 50
+
+# Checkpoint every 10 updates; resume later with a larger budget
+rlcore-train algo=ppo algo.checkpoint_every=10
+rlcore-train algo=ppo algo.total_updates=150 resume_from=<run_dir>/checkpoint.pt
 ```
 
 Every run writes a self-describing local run directory (identity, resolved

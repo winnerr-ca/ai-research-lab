@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import statistics
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -33,11 +33,18 @@ from rlcore.agents.ppo.loss import (
 )
 from rlcore.agents.ppo.model import ActorCritic
 from rlcore.agents.ppo.rollout import RolloutCollector
-from rlcore.envs import make_discrete_env_pair
+from rlcore.checkpoints import (
+    check_resume_config,
+    load_checkpoint,
+    pickle_env,
+    save_checkpoint,
+    unpickle_env,
+)
+from rlcore.envs import EnvPair, env_pair_from_envs, make_discrete_env_pair
 from rlcore.evaluation import EvalStats, evaluate_policy
 from rlcore.experiments import new_run_id, save_final_model, write_run_outputs, write_run_record
 from rlcore.reporting import write_summary
-from rlcore.utils.seeding import seed_everything
+from rlcore.utils.seeding import Rng, restore_rng, rng_state, seed_everything
 
 if TYPE_CHECKING:
     from rlcore.types import Batch
@@ -78,6 +85,9 @@ class PpoConfig:
         eval_episodes: Episodes per evaluation.
         stop_return: Stop early once a periodic greedy evaluation reaches
             this mean return (``None`` disables early stopping).
+        checkpoint_every: Write a resumable ``checkpoint.pt`` into the run
+            directory every this many updates (0 disables; requires
+            ``out_dir``).
     """
 
     env_id: str = "CartPole-v1"
@@ -99,6 +109,7 @@ class PpoConfig:
     eval_every: int = 5
     eval_episodes: int = 20
     stop_return: float | None = 475.0
+    checkpoint_every: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,7 +227,40 @@ def ppo_update(
     }
 
 
-def train(config: PpoConfig, out_dir: Path | None = None) -> TrainResult:
+def _checkpoint_payload(
+    config: PpoConfig,
+    *,
+    run_id: str,
+    update: int,
+    total_env_steps: int,
+    history: list[dict[str, float]],
+    model: ActorCritic,
+    optimizer: torch.optim.Optimizer,
+    rng: Rng,
+    envs: EnvPair,
+    collector: RolloutCollector,
+) -> dict[str, Any]:
+    """Assemble the M4B checkpoint payload for PPO's state."""
+    return {
+        "run_id": run_id,
+        "config": asdict(config),
+        "update": update,
+        "total_env_steps": total_env_steps,
+        "history": history,
+        "model": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "rng": rng_state(rng),
+        "collector": collector.state(),
+        "train_env": pickle_env(envs.train_env),
+        "eval_env": pickle_env(envs.eval_env),
+    }
+
+
+def train(
+    config: PpoConfig,
+    out_dir: Path | None = None,
+    resume_from: Path | None = None,
+) -> TrainResult:
     """Train PPO per ``config`` and return the result.
 
     Mirrors M1's seeding layout: training env, action space, and evaluation
@@ -225,25 +269,52 @@ def train(config: PpoConfig, out_dir: Path | None = None) -> TrainResult:
 
     Args:
         config: Run configuration.
-        out_dir: If given, writes ``config.yaml``, ``metrics.jsonl``, and
-            ``result.json`` there.
+        out_dir: If given, writes the standard run directory there.
+        resume_from: Optional ``checkpoint.pt`` to resume from; the config
+            must match the checkpoint's except the ``total_updates`` budget.
 
     Returns:
         The :class:`TrainResult`, including the final greedy evaluation.
+
+    Raises:
+        ValueError: If ``checkpoint_every > 0`` without ``out_dir``, or the
+            resume config mismatches the checkpoint's.
     """
     start = time.perf_counter()
-    run_id = new_run_id("ppo", config.env_id, config.seed)
-    rng = seed_everything(config.seed)
-    envs = make_discrete_env_pair(config.env_id, rng)
-    model = ActorCritic(envs.obs_dim, envs.n_actions, hidden_sizes=config.hidden_sizes)
-    optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
-    collector = RolloutCollector(envs.train_env)
+    if config.checkpoint_every > 0 and out_dir is None:
+        raise ValueError("checkpoint_every > 0 requires out_dir (checkpoints live there).")
 
-    history: list[dict[str, float]] = []
-    total_env_steps = 0
+    if resume_from is not None:
+        payload = load_checkpoint(resume_from, expected_algo="ppo")
+        check_resume_config(payload["config"], asdict(config), budget_field="total_updates")
+        run_id = str(payload["run_id"])
+        rng = restore_rng(payload["rng"])
+        envs = env_pair_from_envs(
+            unpickle_env(payload["train_env"]), unpickle_env(payload["eval_env"])
+        )
+        model = ActorCritic(envs.obs_dim, envs.n_actions, hidden_sizes=config.hidden_sizes)
+        model.load_state_dict(payload["model"])
+        optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
+        optimizer.load_state_dict(payload["optimizer"])
+        collector = RolloutCollector(envs.train_env)
+        collector.restore_state(payload["collector"])
+        history = payload["history"]
+        total_env_steps = int(payload["total_env_steps"])
+        start_update = int(payload["update"]) + 1
+    else:
+        run_id = new_run_id("ppo", config.env_id, config.seed)
+        rng = seed_everything(config.seed)
+        envs = make_discrete_env_pair(config.env_id, rng)
+        model = ActorCritic(envs.obs_dim, envs.n_actions, hidden_sizes=config.hidden_sizes)
+        optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
+        collector = RolloutCollector(envs.train_env)
+        history = []
+        total_env_steps = 0
+        start_update = 1
+
     stopped_early = False
 
-    for update in range(1, config.total_updates + 1):
+    for update in range(start_update, config.total_updates + 1):
         rollout = collector.collect(model, config.n_steps, generator=rng.torch)
         total_env_steps += len(rollout.batch)
 
@@ -306,6 +377,24 @@ def train(config: PpoConfig, out_dir: Path | None = None) -> TrainResult:
                 logger.info("stop_return %.1f reached at update %d.", config.stop_return, update)
                 break
         history.append(entry)
+        if config.checkpoint_every > 0 and update % config.checkpoint_every == 0:
+            assert out_dir is not None  # validated above
+            save_checkpoint(
+                out_dir / "checkpoint.pt",
+                algo="ppo",
+                payload=_checkpoint_payload(
+                    config,
+                    run_id=run_id,
+                    update=update,
+                    total_env_steps=total_env_steps,
+                    history=history,
+                    model=model,
+                    optimizer=optimizer,
+                    rng=rng,
+                    envs=envs,
+                    collector=collector,
+                ),
+            )
 
     final_eval = evaluate_policy(
         envs.eval_env,

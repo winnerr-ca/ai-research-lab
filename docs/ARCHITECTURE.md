@@ -360,8 +360,16 @@ and thus replaceable — e.g. a future distributed engine).
 
 Checkpointing is specified as a contract, because incomplete checkpoints are
 the difference between "can resume" and "can resume *exactly*" — and
-preemption-safe cloud training requires the latter. A checkpoint MUST
-contain:
+preemption-safe cloud training requires the latter.
+
+*Implementation status (M4B):* items 1, 4 (via env pickling), 5, 6, and 7's
+atomic-write/versioned-schema/fail-loud requirements are implemented for
+the state REINFORCE and PPO actually have, with the resume-equals-continuous
+gate test passing in fresh processes (see
+`docs/design/m4b-checkpoint-resume.md`). Items 2–3 (target networks, SAC
+temperature, replay buffers) bind when the algorithms that own that state
+exist (M5); retention and the registry (item 8) bind at the benchmark
+milestone. A checkpoint MUST contain:
 
 1. **Learner state** — model parameters; optimizer state; LR/entropy/clip
    schedule states; AMP grad-scaler state when mixed precision is active.

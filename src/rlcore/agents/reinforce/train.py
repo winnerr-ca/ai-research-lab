@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -28,11 +28,18 @@ from omegaconf import OmegaConf
 from rlcore.agents.reinforce.policy import CategoricalMlpPolicy
 from rlcore.agents.reinforce.returns import discounted_returns
 from rlcore.agents.reinforce.rollout import collect_episode
-from rlcore.envs import make_discrete_env_pair
+from rlcore.checkpoints import (
+    check_resume_config,
+    load_checkpoint,
+    pickle_env,
+    save_checkpoint,
+    unpickle_env,
+)
+from rlcore.envs import EnvPair, env_pair_from_envs, make_discrete_env_pair
 from rlcore.evaluation import EvalStats, evaluate_policy
 from rlcore.experiments import new_run_id, save_final_model, write_run_outputs, write_run_record
 from rlcore.reporting import write_summary
-from rlcore.utils.seeding import seed_everything
+from rlcore.utils.seeding import Rng, restore_rng, rng_state, seed_everything
 
 if TYPE_CHECKING:
     from rlcore.types import Batch
@@ -61,6 +68,9 @@ class ReinforceConfig:
         eval_episodes: Episodes per evaluation.
         stop_return: Stop early once a periodic greedy evaluation reaches
             this mean return (``None`` disables early stopping).
+        checkpoint_every: Write a resumable ``checkpoint.pt`` into the run
+            directory every this many updates (0 disables; requires
+            ``out_dir``).
     """
 
     env_id: str = "CartPole-v1"
@@ -74,6 +84,7 @@ class ReinforceConfig:
     eval_every: int = 20
     eval_episodes: int = 20
     stop_return: float | None = 475.0
+    checkpoint_every: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,7 +177,40 @@ def reinforce_update(
     }
 
 
-def train(config: ReinforceConfig, out_dir: Path | None = None) -> TrainResult:
+def _checkpoint_payload(
+    config: ReinforceConfig,
+    *,
+    run_id: str,
+    update: int,
+    total_env_steps: int,
+    total_episodes: int,
+    history: list[dict[str, float]],
+    policy: CategoricalMlpPolicy,
+    optimizer: torch.optim.Optimizer,
+    rng: Rng,
+    envs: EnvPair,
+) -> dict[str, Any]:
+    """Assemble the M4B checkpoint payload for REINFORCE's state."""
+    return {
+        "run_id": run_id,
+        "config": asdict(config),
+        "update": update,
+        "total_env_steps": total_env_steps,
+        "total_episodes": total_episodes,
+        "history": history,
+        "model": policy.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "rng": rng_state(rng),
+        "train_env": pickle_env(envs.train_env),
+        "eval_env": pickle_env(envs.eval_env),
+    }
+
+
+def train(
+    config: ReinforceConfig,
+    out_dir: Path | None = None,
+    resume_from: Path | None = None,
+) -> TrainResult:
     """Train REINFORCE per ``config`` and return the result.
 
     Seeds all streams from ``config.seed`` (training env, evaluation env, and
@@ -176,26 +220,56 @@ def train(config: ReinforceConfig, out_dir: Path | None = None) -> TrainResult:
 
     Args:
         config: Run configuration.
-        out_dir: If given, writes ``config.yaml`` (resolved), ``metrics.jsonl``
-            (one history entry per line), and ``result.json`` there.
+        out_dir: If given, writes the standard run directory there.
+        resume_from: Optional ``checkpoint.pt`` to resume from; the config
+            must match the checkpoint's except the ``updates`` budget.
 
     Returns:
         The :class:`TrainResult`, including the final greedy evaluation.
+
+    Raises:
+        ValueError: If ``checkpoint_every > 0`` without ``out_dir``, or the
+            resume config mismatches the checkpoint's.
     """
     start = time.perf_counter()
-    run_id = new_run_id("reinforce", config.env_id, config.seed)
-    rng = seed_everything(config.seed)
-    envs = make_discrete_env_pair(config.env_id, rng)
-    env = envs.train_env
-    policy = CategoricalMlpPolicy(envs.obs_dim, envs.n_actions, hidden_sizes=config.hidden_sizes)
-    optimizer = torch.optim.Adam(policy.parameters(), lr=config.lr)
+    if config.checkpoint_every > 0 and out_dir is None:
+        raise ValueError("checkpoint_every > 0 requires out_dir (checkpoints live there).")
 
-    history: list[dict[str, float]] = []
-    total_env_steps = 0
-    total_episodes = 0
+    if resume_from is not None:
+        payload = load_checkpoint(resume_from, expected_algo="reinforce")
+        check_resume_config(payload["config"], asdict(config), budget_field="updates")
+        run_id = str(payload["run_id"])
+        rng = restore_rng(payload["rng"])
+        envs = env_pair_from_envs(
+            unpickle_env(payload["train_env"]), unpickle_env(payload["eval_env"])
+        )
+        policy = CategoricalMlpPolicy(
+            envs.obs_dim, envs.n_actions, hidden_sizes=config.hidden_sizes
+        )
+        policy.load_state_dict(payload["model"])
+        optimizer = torch.optim.Adam(policy.parameters(), lr=config.lr)
+        optimizer.load_state_dict(payload["optimizer"])
+        history = payload["history"]
+        total_env_steps = int(payload["total_env_steps"])
+        total_episodes = int(payload["total_episodes"])
+        start_update = int(payload["update"]) + 1
+    else:
+        run_id = new_run_id("reinforce", config.env_id, config.seed)
+        rng = seed_everything(config.seed)
+        envs = make_discrete_env_pair(config.env_id, rng)
+        policy = CategoricalMlpPolicy(
+            envs.obs_dim, envs.n_actions, hidden_sizes=config.hidden_sizes
+        )
+        optimizer = torch.optim.Adam(policy.parameters(), lr=config.lr)
+        history = []
+        total_env_steps = 0
+        total_episodes = 0
+        start_update = 1
+
+    env = envs.train_env
     stopped_early = False
 
-    for update in range(1, config.updates + 1):
+    for update in range(start_update, config.updates + 1):
         episodes = [
             collect_episode(env, policy, generator=rng.torch)
             for _ in range(config.episodes_per_update)
@@ -246,6 +320,24 @@ def train(config: ReinforceConfig, out_dir: Path | None = None) -> TrainResult:
                 metrics["entropy"],
             )
         history.append(entry)
+        if config.checkpoint_every > 0 and update % config.checkpoint_every == 0:
+            assert out_dir is not None  # validated above
+            save_checkpoint(
+                out_dir / "checkpoint.pt",
+                algo="reinforce",
+                payload=_checkpoint_payload(
+                    config,
+                    run_id=run_id,
+                    update=update,
+                    total_env_steps=total_env_steps,
+                    total_episodes=total_episodes,
+                    history=history,
+                    policy=policy,
+                    optimizer=optimizer,
+                    rng=rng,
+                    envs=envs,
+                ),
+            )
 
     final_eval = evaluate_policy(
         envs.eval_env,

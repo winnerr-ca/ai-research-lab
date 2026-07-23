@@ -58,6 +58,18 @@ class RolloutCollector:
         self._obs: Any = None
         self._episode_return = 0.0
 
+    def state(self) -> dict[str, Any]:
+        """Snapshot for checkpointing: current obs and running episode return."""
+        return {"obs": self._obs, "episode_return": self._episode_return}
+
+    def restore_state(self, state: dict[str, Any]) -> None:
+        """Restore a snapshot taken by :meth:`state`.
+
+        Pair the snapshot with the env it was captured alongside.
+        """
+        self._obs = state["obs"]
+        self._episode_return = float(state["episode_return"])
+
     def collect(
         self,
         model: ActorCritic,

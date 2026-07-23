@@ -52,6 +52,7 @@ class TrainRunConfig:
 
     defaults: list[Any] = field(default_factory=lambda: [{"algo": MISSING}, "_self_"])
     algo: Any = MISSING
+    resume_from: str | None = None
 
 
 _cs = ConfigStore.instance()
@@ -60,13 +61,15 @@ _cs.store(group="algo", name="reinforce", node=ReinforceConfig)
 _cs.store(group="algo", name="ppo", node=PpoConfig)
 
 
-def dispatch_train(algo_config: object, out_dir: Path | None) -> None:
+def dispatch_train(
+    algo_config: object, out_dir: Path | None, resume_from: Path | None = None
+) -> None:
     """Route a resolved algorithm config to its trainer."""
     result: ReinforceTrainResult | PpoTrainResult
     if isinstance(algo_config, ReinforceConfig):
-        result = reinforce_train(algo_config, out_dir=out_dir)
+        result = reinforce_train(algo_config, out_dir=out_dir, resume_from=resume_from)
     elif isinstance(algo_config, PpoConfig):
-        result = ppo_train(algo_config, out_dir=out_dir)
+        result = ppo_train(algo_config, out_dir=out_dir, resume_from=resume_from)
     else:
         raise ValueError(
             f"Unknown algorithm config type {type(algo_config).__name__}; "
@@ -88,7 +91,8 @@ def train_main(cfg: TrainRunConfig) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     resolved = cast("TrainRunConfig", OmegaConf.to_object(cast("Any", cfg)))
     out_dir = Path(HydraConfig.get().runtime.output_dir)
-    dispatch_train(resolved.algo, out_dir)
+    resume = Path(resolved.resume_from) if resolved.resume_from else None
+    dispatch_train(resolved.algo, out_dir, resume_from=resume)
 
 
 def evaluate_run(

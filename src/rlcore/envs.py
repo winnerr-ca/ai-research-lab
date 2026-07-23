@@ -46,6 +46,35 @@ class EnvPair:
         self.eval_env.close()
 
 
+def env_pair_from_envs(train_env: gym.Env[Any, Any], eval_env: gym.Env[Any, Any]) -> EnvPair:
+    """Build a validated :class:`EnvPair` from existing env instances.
+
+    Used when envs come from somewhere other than ``gym.make`` — most
+    importantly checkpoint restoration, where unpickled envs carry their
+    own RNG and physical state and must NOT be re-seeded.
+
+    Raises:
+        ValueError: If the envs' spaces do not match the requirements.
+    """
+    obs_space = train_env.observation_space
+    act_space = train_env.action_space
+    name = getattr(getattr(train_env, "spec", None), "id", type(train_env).__name__)
+    if (
+        not isinstance(obs_space, spaces.Box)
+        or obs_space.shape is None
+        or len(obs_space.shape) != 1
+    ):
+        raise ValueError(f"{name}: requires a flat Box observation space, got {obs_space}.")
+    if not isinstance(act_space, spaces.Discrete):
+        raise ValueError(f"{name}: requires a Discrete action space, got {act_space}.")
+    return EnvPair(
+        train_env=train_env,
+        eval_env=eval_env,
+        obs_dim=int(obs_space.shape[0]),
+        n_actions=int(act_space.n),
+    )
+
+
 def make_discrete_env_pair(env_id: str, rng: Rng) -> EnvPair:
     """Create and seed a train/eval env pair for a flat-obs discrete task.
 
@@ -63,20 +92,4 @@ def make_discrete_env_pair(env_id: str, rng: Rng) -> EnvPair:
     train_env.reset(seed=rng.child_seed(0))
     train_env.action_space.seed(rng.child_seed(1))
     eval_env.reset(seed=rng.child_seed(2))
-
-    obs_space = train_env.observation_space
-    act_space = train_env.action_space
-    if (
-        not isinstance(obs_space, spaces.Box)
-        or obs_space.shape is None
-        or len(obs_space.shape) != 1
-    ):
-        raise ValueError(f"{env_id}: requires a flat Box observation space, got {obs_space}.")
-    if not isinstance(act_space, spaces.Discrete):
-        raise ValueError(f"{env_id}: requires a Discrete action space, got {act_space}.")
-    return EnvPair(
-        train_env=train_env,
-        eval_env=eval_env,
-        obs_dim=int(obs_space.shape[0]),
-        n_actions=int(act_space.n),
-    )
+    return env_pair_from_envs(train_env, eval_env)
