@@ -160,3 +160,19 @@ entry point (M1), JSONL/run-directory machinery (M1), tracker integration
 - **M7 scale path:** vectorized-env throughput benchmarks first; distributed
   collection only if profiling shows collection-bound training — scale
   decisions driven by measurements.
+
+## Execution log (as built)
+
+Design records live in `docs/design/`; recorded validations in
+`benchmarks/results/`. Where an executed milestone deviated from a note
+above (e.g. the MuJoCo/Atari reproduction *proposals*), the design record
+states what was actually done and why.
+
+| # | Status | Record | Validation |
+|---|---|---|---|
+| 0–2 | done | (pre-consolidation; see git history) | `m1_reinforce_cartpole.*`, `m2_ppo_cartpole.*` |
+| 3 | done | `m3-consolidation-audit.md` | reproduction re-confirmed in-milestone |
+| 4A–4C | done | `m4a-*.md`, `m4b-*.md`, `m4c-*.md` | gate tests in `tests/unit/` |
+| 5 | done | `m5-dqn.md` | `m5_dqn.*` (CartPole 4/5 seeds, Acrobot 5/5; failures reported) |
+| 6 | done | `m6-sac.md` | `m6_sac.*` (Pendulum 4/5 auto-α seeds; miss reported) |
+| 7 | done | `m7-benchmarks.md` | `m7_benchmark.*` (12/12 cells ok, clean commit) |

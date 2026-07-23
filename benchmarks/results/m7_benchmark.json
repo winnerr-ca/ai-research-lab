@@ -1,0 +1,460 @@
+{
+  "status_census": {
+    "ok": 12
+  },
+  "records": [
+    {
+      "run_key": "reinforce-cartpole-v1-s0",
+      "algo": "reinforce",
+      "env_id": "CartPole-v1",
+      "seed": 0,
+      "timeout_s": 900.0,
+      "wall_time_s": 46.0,
+      "status": "ok"
+    },
+    {
+      "run_key": "reinforce-cartpole-v1-s1",
+      "algo": "reinforce",
+      "env_id": "CartPole-v1",
+      "seed": 1,
+      "timeout_s": 900.0,
+      "wall_time_s": 42.6,
+      "status": "ok"
+    },
+    {
+      "run_key": "reinforce-cartpole-v1-s2",
+      "algo": "reinforce",
+      "env_id": "CartPole-v1",
+      "seed": 2,
+      "timeout_s": 900.0,
+      "wall_time_s": 43.3,
+      "status": "ok"
+    },
+    {
+      "run_key": "ppo-cartpole-v1-s0",
+      "algo": "ppo",
+      "env_id": "CartPole-v1",
+      "seed": 0,
+      "timeout_s": 900.0,
+      "wall_time_s": 43.6,
+      "status": "ok"
+    },
+    {
+      "run_key": "ppo-cartpole-v1-s1",
+      "algo": "ppo",
+      "env_id": "CartPole-v1",
+      "seed": 1,
+      "timeout_s": 900.0,
+      "wall_time_s": 44.2,
+      "status": "ok"
+    },
+    {
+      "run_key": "ppo-cartpole-v1-s2",
+      "algo": "ppo",
+      "env_id": "CartPole-v1",
+      "seed": 2,
+      "timeout_s": 900.0,
+      "wall_time_s": 43.6,
+      "status": "ok"
+    },
+    {
+      "run_key": "dqn-cartpole-v1-s0",
+      "algo": "dqn",
+      "env_id": "CartPole-v1",
+      "seed": 0,
+      "timeout_s": 900.0,
+      "wall_time_s": 100.3,
+      "status": "ok"
+    },
+    {
+      "run_key": "dqn-cartpole-v1-s1",
+      "algo": "dqn",
+      "env_id": "CartPole-v1",
+      "seed": 1,
+      "timeout_s": 900.0,
+      "wall_time_s": 90.9,
+      "status": "ok"
+    },
+    {
+      "run_key": "dqn-cartpole-v1-s2",
+      "algo": "dqn",
+      "env_id": "CartPole-v1",
+      "seed": 2,
+      "timeout_s": 900.0,
+      "wall_time_s": 89.2,
+      "status": "ok"
+    },
+    {
+      "run_key": "sac-pendulum-v1-s0",
+      "algo": "sac",
+      "env_id": "Pendulum-v1",
+      "seed": 0,
+      "timeout_s": 1200.0,
+      "wall_time_s": 248.8,
+      "status": "ok"
+    },
+    {
+      "run_key": "sac-pendulum-v1-s1",
+      "algo": "sac",
+      "env_id": "Pendulum-v1",
+      "seed": 1,
+      "timeout_s": 1200.0,
+      "wall_time_s": 402.0,
+      "status": "ok"
+    },
+    {
+      "run_key": "sac-pendulum-v1-s2",
+      "algo": "sac",
+      "env_id": "Pendulum-v1",
+      "seed": 2,
+      "timeout_s": 1200.0,
+      "wall_time_s": 325.6,
+      "status": "ok"
+    }
+  ],
+  "groups": {
+    "dqn|CartPole-v1": {
+      "algo": "dqn",
+      "env_id": "CartPole-v1",
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "final_scores": [
+        148.65,
+        177.1,
+        126.4
+      ],
+      "summary": {
+        "n": 3.0,
+        "mean": 150.71666666666667,
+        "median": 148.65,
+        "iqm": 150.71666666666667,
+        "iqm_ci_low": 126.40000000000002,
+        "iqm_ci_high": 177.1,
+        "min": 126.4,
+        "max": 177.1
+      },
+      "curves": [
+        {
+          "seed": 0,
+          "env_steps": [
+            2500.0,
+            5000.0,
+            7500.0,
+            10000.0,
+            12500.0,
+            15000.0,
+            17500.0,
+            20000.0,
+            22500.0,
+            25000.0,
+            27500.0,
+            30000.0
+          ],
+          "eval_return_mean": [
+            11.3,
+            193.3,
+            224.9,
+            296.0,
+            110.4,
+            145.45,
+            116.6,
+            155.9,
+            179.95,
+            299.55,
+            107.5,
+            148.35
+          ]
+        },
+        {
+          "seed": 1,
+          "env_steps": [
+            2500.0,
+            5000.0,
+            7500.0,
+            10000.0,
+            12500.0,
+            15000.0,
+            17500.0,
+            20000.0,
+            22500.0,
+            25000.0,
+            27500.0,
+            30000.0
+          ],
+          "eval_return_mean": [
+            31.35,
+            147.15,
+            98.3,
+            296.75,
+            190.95,
+            148.65,
+            106.25,
+            116.9,
+            122.15,
+            159.55,
+            137.3,
+            170.85
+          ]
+        },
+        {
+          "seed": 2,
+          "env_steps": [
+            2500.0,
+            5000.0,
+            7500.0,
+            10000.0,
+            12500.0,
+            15000.0,
+            17500.0,
+            20000.0,
+            22500.0,
+            25000.0,
+            27500.0,
+            30000.0
+          ],
+          "eval_return_mean": [
+            9.7,
+            217.95,
+            128.2,
+            122.55,
+            118.0,
+            122.15,
+            102.1,
+            174.5,
+            203.7,
+            103.05,
+            101.45,
+            128.75
+          ]
+        }
+      ]
+    },
+    "ppo|CartPole-v1": {
+      "algo": "ppo",
+      "env_id": "CartPole-v1",
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "final_scores": [
+        500.0,
+        500.0,
+        500.0
+      ],
+      "summary": {
+        "n": 3.0,
+        "mean": 500.0,
+        "median": 500.0,
+        "iqm": 500.0,
+        "iqm_ci_low": 500.0,
+        "iqm_ci_high": 500.0,
+        "min": 500.0,
+        "max": 500.0
+      },
+      "curves": [
+        {
+          "seed": 0,
+          "env_steps": [
+            10240.0,
+            20480.0,
+            30720.0
+          ],
+          "eval_return_mean": [
+            453.35,
+            495.85,
+            500.0
+          ]
+        },
+        {
+          "seed": 1,
+          "env_steps": [
+            10240.0,
+            20480.0,
+            30720.0
+          ],
+          "eval_return_mean": [
+            455.55,
+            500.0,
+            500.0
+          ]
+        },
+        {
+          "seed": 2,
+          "env_steps": [
+            10240.0,
+            20480.0,
+            30720.0
+          ],
+          "eval_return_mean": [
+            489.75,
+            500.0,
+            500.0
+          ]
+        }
+      ]
+    },
+    "reinforce|CartPole-v1": {
+      "algo": "reinforce",
+      "env_id": "CartPole-v1",
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "final_scores": [
+        500.0,
+        500.0,
+        500.0
+      ],
+      "summary": {
+        "n": 3.0,
+        "mean": 500.0,
+        "median": 500.0,
+        "iqm": 500.0,
+        "iqm_ci_low": 500.0,
+        "iqm_ci_high": 500.0,
+        "min": 500.0,
+        "max": 500.0
+      },
+      "curves": [
+        {
+          "seed": 0,
+          "env_steps": [
+            14929.0,
+            100960.0
+          ],
+          "eval_return_mean": [
+            406.95,
+            500.0
+          ]
+        },
+        {
+          "seed": 1,
+          "env_steps": [
+            14146.0,
+            95415.0
+          ],
+          "eval_return_mean": [
+            203.1,
+            500.0
+          ]
+        },
+        {
+          "seed": 2,
+          "env_steps": [
+            14329.0,
+            98012.0
+          ],
+          "eval_return_mean": [
+            453.3,
+            500.0
+          ]
+        }
+      ]
+    },
+    "sac|Pendulum-v1": {
+      "algo": "sac",
+      "env_id": "Pendulum-v1",
+      "seeds": [
+        0,
+        1,
+        2
+      ],
+      "final_scores": [
+        -166.69731314849145,
+        -155.0001145124251,
+        -189.42851457450448
+      ],
+      "summary": {
+        "n": 3.0,
+        "mean": -170.37531407847368,
+        "median": -166.69731314849145,
+        "iqm": -170.37531407847368,
+        "iqm_ci_low": -189.42851457450448,
+        "iqm_ci_high": -155.0001145124251,
+        "min": -189.42851457450448,
+        "max": -155.0001145124251
+      },
+      "curves": [
+        {
+          "seed": 0,
+          "env_steps": [
+            2000.0,
+            4000.0,
+            6000.0,
+            8000.0,
+            10000.0,
+            12000.0,
+            14000.0
+          ],
+          "eval_return_mean": [
+            -1256.6242177259383,
+            -229.831495323122,
+            -111.36959659840322,
+            -149.261402654369,
+            -132.72718861729882,
+            -136.72671059735075,
+            -138.536976646661
+          ]
+        },
+        {
+          "seed": 1,
+          "env_steps": [
+            2000.0,
+            4000.0,
+            6000.0,
+            8000.0,
+            10000.0,
+            12000.0,
+            14000.0
+          ],
+          "eval_return_mean": [
+            -1036.4728499633663,
+            -225.21779081241434,
+            -187.2897544609362,
+            -133.50184452688106,
+            -129.8263457659395,
+            -163.91444864105785,
+            -147.67272451875516
+          ]
+        },
+        {
+          "seed": 2,
+          "env_steps": [
+            2000.0,
+            4000.0,
+            6000.0,
+            8000.0,
+            10000.0,
+            12000.0,
+            14000.0
+          ],
+          "eval_return_mean": [
+            -1043.049320540664,
+            -301.1737634540005,
+            -109.44065543296912,
+            -213.15085734885056,
+            -154.2652999636557,
+            -163.62179483977178,
+            -118.48677732300496
+          ]
+        }
+      ]
+    }
+  },
+  "comparisons": {
+    "CartPole-v1": {
+      "P(dqn > ppo)": 0.0,
+      "P(dqn > reinforce)": 0.0,
+      "P(ppo > dqn)": 1.0,
+      "P(ppo > reinforce)": 0.5,
+      "P(reinforce > dqn)": 1.0,
+      "P(reinforce > ppo)": 0.5
+    },
+    "Pendulum-v1": {}
+  }
+}
