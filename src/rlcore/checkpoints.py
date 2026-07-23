@@ -81,6 +81,7 @@ def save_checkpoint(path: Path, *, algo: str, payload: dict[str, Any]) -> None:
         "algo": algo,
         "payload": payload,
     }
+    path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.parent / f"{path.name}.tmp"
     with tmp_path.open("wb") as stream:
         torch.save(envelope, stream)

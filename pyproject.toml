@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rlcore"
-version = "0.0.1"
+version = "1.0.0"
 description = "A modular reinforcement learning research platform: legible algorithms on shared, tested infrastructure."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -50,6 +50,10 @@ research = [
     "pypdf>=5.0",
     "anthropic>=0.40",
 ]
+# Docs build (CI docs job): plain mkdocs, strict mode.
+docs = [
+    "mkdocs>=1.6",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/rlcore"]
@@ -82,13 +86,14 @@ convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["D1"] # tests: docstrings optional, annotations still required
+"examples/*.py" = ["T201"] # tutorials print their narrative on purpose
 
 [tool.mypy]
 python_version = "3.11"
 strict = true
 warn_unreachable = true
 pretty = true
-files = ["src", "tests", "benchmarks"]
+files = ["src", "tests", "benchmarks", "examples"]
 mypy_path = "src"
 
 [tool.pytest.ini_options]

@@ -65,6 +65,15 @@ class TestEnvelope:
         payload = load_checkpoint(path, expected_algo="ppo")
         assert torch.equal(payload["x"], torch.ones(3))
 
+    def test_save_creates_missing_parent_directories(self, tmp_path: Path) -> None:
+        # Regression: tutorial 02 saved into a run dir that did not exist
+        # yet (the trainer only creates out_dir when writing run outputs,
+        # after the first mid-run checkpoint).
+        path = tmp_path / "not" / "yet" / "created" / "checkpoint.pt"
+        save_checkpoint(path, algo="ppo", payload={"x": torch.ones(2)})
+        payload = load_checkpoint(path, expected_algo="ppo")
+        assert torch.equal(payload["x"], torch.ones(2))
+
     def test_missing_file(self, tmp_path: Path) -> None:
         with pytest.raises(FileNotFoundError):
             load_checkpoint(tmp_path / "absent.pt", expected_algo="ppo")

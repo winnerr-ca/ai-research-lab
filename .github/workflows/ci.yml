@@ -47,3 +47,39 @@ jobs:
 
       - name: Learning canaries
         run: uv run pytest -m slow
+
+
+  build-and-install-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Build wheel and sdist
+        run: uv build
+
+      - name: Install wheel into a clean environment and smoke-test
+        run: |
+          uv venv /tmp/smoke-venv
+          uv pip install --python /tmp/smoke-venv/bin/python dist/*.whl
+          /tmp/smoke-venv/bin/python -c "import rlcore; import rlcore.research; print(rlcore.__name__, 'ok')"
+          /tmp/smoke-venv/bin/rlcore-train algo=ppo --help
+          /tmp/smoke-venv/bin/rlcore-benchmark --help
+          /tmp/smoke-venv/bin/rlcore-research --help
+
+  docs-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Build docs (strict)
+        run: uv run --extra docs mkdocs build --strict

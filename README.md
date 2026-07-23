@@ -1,70 +1,98 @@
 # rlcore — Reinforcement Learning Research Platform
 
-A modular, open-source platform for reinforcement learning research: implement
-algorithms from scratch, train them on standard environments, compare them
-fairly, and reproduce published results.
+A reproducibility-first platform for reinforcement learning research:
+algorithms implemented from scratch with visible math, trained on
+standard environments, compared with honest statistics, and recorded so
+every number traces back to a commit, a config, and a seed.
 
-> **Status: Phase 0 (scaffolding) in progress.** The architecture and roadmap
-> are approved — start with the documents below.
+**Version 1.0.0** — Python 3.11 · PyTorch · Gymnasium · Apache-2.0
 
-The platform has two connected layers: an **execution layer** (environments,
-agents, training, buffers, checkpoints, tracking, statistical comparison —
-milestones 0–7) and a **research intelligence layer** built on top of it
-(paper index, research memory, hypothesis and experiment-plan registry,
-evidence-linked reports, LLM-assisted analysis — milestones 8–9). See
-`docs/ARCHITECTURE.md` §1.1 for how the layers connect.
+## What's inside
+
+| | |
+|---|---|
+| **Algorithms** | REINFORCE, PPO (single + vectorized envs), DQN (+ Double DQN), SAC (auto/fixed temperature) — each with pure unit-tested loss functions, exact terminated/truncated handling, deterministic seeding, and exact checkpoint resume |
+| **Experimentation** | Run directories (config/metrics/result/model/plots), Hydra CLI, local tracking always + optional W&B/MLflow, manifest-driven benchmarks with fixed budgets and robust statistics (IQM, bootstrap CIs, probability of improvement) |
+| **Scale-out** | Vectorized collection, `device=cpu/cuda/auto` with safe fallback, CPU/CUDA Dockerfiles (documented, build-blocked in the dev environment), measured throughput profile |
+| **Research layer** | Typed versioned research entities (papers → claims → hypotheses → plans → runs → analyses → conclusions → reports), source-grounded citations, five human approval gates, provider-neutral LLM interface (offline mock included) |
+
+## Install
+
+```sh
+git clone <this-repo> && cd ai-research-lab
+uv sync                  # core
+uv sync --all-extras     # + trackers, research layer, SB3 parity, dev tools
+```
+
+## Train something
+
+```sh
+uv run rlcore-train algo=ppo                          # PPO on CartPole-v1
+uv run rlcore-train algo=sac algo.seed=3              # SAC on Pendulum-v1
+uv run rlcore-train algo=dqn algo.double_q=true       # Double DQN
+uv run rlcore-train algo=ppo algo.n_envs=4            # vectorized collection
+```
+
+Every run writes a self-describing directory under `outputs/`:
+`run.json` (identity + full environment metadata), `config.yaml`,
+`metrics.jsonl`, `result.json`, `final_model.pt`, `summary.md`, and a
+learning-curve plot. Evaluate a finished run with
+`uv run rlcore-evaluate <run_dir>`.
+
+## Compare things fairly
+
+```sh
+uv run rlcore-benchmark benchmarks/manifests/m7-manifest.json
+```
+
+Manifests fix budgets (early stopping is rejected by the schema), runs
+execute in isolated subprocesses with timeouts, failures are recorded
+as results, and interrupted benchmarks resume. Reports aggregate with
+IQM, bootstrap CIs, and probability of improvement — with small-sample
+caveats stated, not hidden.
+
+## Learn the platform
+
+Start with the tutorials in [`examples/`](examples/) (each one is
+tested in CI):
+
+1. `01_train_and_evaluate.py` — trains an agent, tours the run directory
+2. `02_resume_training.py` — proves resume-from-checkpoint is *exact*
+3. `03_compare_with_statistics.py` — the multi-seed comparison protocol
+4. `04_research_workflow.py` — grounded claims, real runs, approval gates
 
 ## Documents
 
 | Document | Purpose |
 |---|---|
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Design principles, prior-art review, system architecture, component specifications, repository layout, testing strategy, risks |
-| [`docs/ROADMAP.md`](docs/ROADMAP.md) | Milestones, phase gates, acceptance criteria, and the detailed plan for Phase 0 |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Design principles, system architecture, testing strategy |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | Milestone history and deferred work |
+| [`docs/algorithms/`](docs/algorithms/) | Per-algorithm math, derivations, and caveats |
+| [`docs/design/`](docs/design/) | Per-milestone design records (decisions + self-reviews) |
+| [`docs/reproductions/`](docs/reproductions/) | Honestly-labeled reproduction packages |
+| [`docs/research.md`](docs/research.md) | The research layer and its approval gates |
+| [`docs/DOCKER.md`](docs/DOCKER.md) / [`docs/CLOUD.md`](docs/CLOUD.md) | Containers, devices, preemption recovery |
+| [`benchmarks/results/`](benchmarks/results/) | Recorded validations — raw JSON + protocol |
 
-## Approach
+## Principles (the short version)
 
-Existing RL codebases resolve the tension between single-file clarity and
-reusable infrastructure in different ways, each well suited to its own goals.
-This project aims at a specific point in that space: **legible algorithm
-code on top of shared, tested infrastructure**, with reproducibility
-(seeds, configs, complete checkpoints), numerical verification against
-reference implementations, and multi-seed statistical evaluation treated as
-core features. Shared abstractions are extracted from working algorithm
-implementations rather than designed up front.
+- **Truncation is not termination.** No bootstrap at true termination;
+  bootstrap from the final observation at truncation; no temporal chain
+  crosses either boundary. Unit-tested with hand-computed cases.
+- **Numbers come from runs.** Configs, seeds, versions, commit, device,
+  and protocol are recorded with every result; failed seeds are
+  reported, not dropped.
+- **Claims match evidence.** Multi-seed, equal budgets, robust
+  statistics — or it's an engineering observation, clearly labeled.
+- **Math stays visible.** Losses and estimators are pure functions in
+  each algorithm's directory; shared code is extracted only after
+  multiple algorithms genuinely need it.
+- **Humans hold the gates.** Expensive, paid, published, destructive,
+  and hypothesis-to-conclusion actions all require an explicit recorded
+  human approval.
 
-## Usage
+## Contributing
 
-```sh
-# Train (algorithm is a Hydra config group; any field is overridable)
-rlcore-train algo=ppo
-rlcore-train algo=reinforce algo.seed=3 algo.lr=0.005
-
-# Re-evaluate a finished run from its run directory
-rlcore-evaluate outputs/<date>/<time>/ --episodes 50
-
-# Checkpoint every 10 updates; resume later with a larger budget
-rlcore-train algo=ppo algo.checkpoint_every=10
-rlcore-train algo=ppo algo.total_updates=150 resume_from=<run_dir>/checkpoint.pt
-
-# Optional tracker mirrors (local run dir stays the source of record;
-# W&B runs offline and MLflow uses a local SQLite store — no credentials)
-rlcore-train algo=ppo track=wandb
-rlcore-train algo=ppo track=mlflow
-```
-
-Every run writes a self-describing local run directory (identity, resolved
-config, git/version/device provenance, JSONL metrics, final model,
-summary + learning-curve plot) — no external account required. See
-`docs/design/m4a-local-tracking.md` for the layout.
-
-## Planned stack
-
-Python · PyTorch · Gymnasium · Hydra · Weights & Biases (adapter-based, MLflow
-compatible) · Docker · Ruff · mypy · pytest · Stable-Baselines3 (verification
-only, never as the primary implementation).
-
-## Development process
-
-Work proceeds in reviewed phases. Each phase states its objective, designs
-before coding, ships tested and type-checked code, and passes a review gate
-before the next phase begins. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md). All project spaces follow the
+[Code of Conduct](CODE_OF_CONDUCT.md); security policy in
+[SECURITY.md](SECURITY.md). Cite via [CITATION.cff](CITATION.cff).

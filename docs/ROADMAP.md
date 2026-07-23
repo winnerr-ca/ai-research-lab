@@ -63,7 +63,7 @@ Notes:
   mathematical derivation, known weaknesses, comparison to alternatives, and
   an implementation-detail review against the literature (e.g. the PPO
   detail catalogue of Huang et al., ICLR Blog Track 2022).
-- **M8–M9 are the researcher layer** (ARCHITECTURE §1.1): M0–M7 build the
+- **M9 is the researcher layer** (ARCHITECTURE §1.1): M0–M7 build the
   execution layer — the experimental engine — and M8–M9 add the research
   intelligence layer on top of it. They sit last not because they matter
   least, but because their design should be extracted from real research
@@ -146,20 +146,23 @@ entry point (M1), JSONL/run-directory machinery (M1), tracker integration
   + N, identical CPU weights, scoped to the state REINFORCE and PPO
   actually have (no replay buffers, target networks, or SAC temperature
   until the algorithms that own them exist).
-- **rliable deferral:** aggregate-metrics tooling waits for M6, when
-  multiple algorithms and environments make aggregate statistics
-  meaningful; because rliable's upstream repository is archived, any use
-  goes behind a small, tested adapter with a pinned dependency.
+- **rliable deferral (resolved at M7):** aggregate statistics landed as
+  `rlcore.stats` — a native, hand-computed-test-anchored implementation
+  of the same protocol, chosen over depending on the archived rliable
+  repository; the tested module IS the adapter contract.
 - **Action sampling stays un-unified through M4** (audit entry 3): the
   REINFORCE and PPO sampling paths are preserved verbatim unless a genuine
   consumer requires a shared implementation *and* a full revalidation is
   scheduled.
-- **M6 reproduction targets (proposal):** PPO on MuJoCo locomotion vs.
-  published reference results; DQN on a 3–5 game Atari subset vs. published
-  scores. Full-suite Atari is out of scope until compute is budgeted.
-- **M7 scale path:** vectorized-env throughput benchmarks first; distributed
-  collection only if profiling shows collection-bound training — scale
-  decisions driven by measurements.
+- **Reproduction targets (outcome):** MuJoCo/Atari-scale reproduction was
+  not feasible on the available compute; the shipped packages in
+  `docs/reproductions/` are honestly labeled *implementation validation*
+  on classic control, and paper-protocol reproduction stays deferred.
+- **Scale path (outcome, M8):** the measured profile
+  (`benchmarks/results/m8_throughput.md`) showed Python/env-bound
+  workloads at classic-control scale and no full-training speedup from
+  vectorization there; no distributed layer was built, per the rule that
+  measurements drive scale decisions.
 
 ## Execution log (as built)
 
@@ -178,3 +181,4 @@ states what was actually done and why.
 | 7 | done | `m7-benchmarks.md` | `m7_benchmark.*` (12/12 cells ok, clean commit) |
 | 8 | done | `m8-scale-out.md` | `m8_throughput.*` (measured; vectorization honestly not a speedup at this scale), `m8_docker.md` (container build blocked by env network policy — recorded) |
 | 9 | done | `m9-research-layer.md` | `m9_research_demo.*` (real 2x2 ablation, gates demonstrably enforced, MockProvider only) |
+| 10 | done | `m10-release.md` | `v1_demonstration.*` (20-item final demonstration), `docs/FINAL-REPORT.md` |

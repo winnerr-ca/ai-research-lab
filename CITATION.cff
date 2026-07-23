@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: "If you use rlcore in your research, please cite it as below."
+title: "rlcore: a reproducibility-first reinforcement learning research platform"
+type: software
+authors:
+  - name: "The rlcore contributors"
+license: Apache-2.0
+repository-code: "https://github.com/winnerr-ca/ai-research-lab"
+version: 1.0.0
+date-released: 2026-07-23
+keywords:
+  - reinforcement-learning
+  - reproducibility
+  - research-platform
+  - pytorch

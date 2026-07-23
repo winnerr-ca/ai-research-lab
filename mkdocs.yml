@@ -1,0 +1,35 @@
+site_name: rlcore
+site_description: >-
+  Reproducibility-first reinforcement learning research platform.
+repo_url: https://github.com/winnerr-ca/ai-research-lab
+docs_dir: docs
+theme:
+  name: mkdocs
+nav:
+  - Overview:
+      - Architecture: ARCHITECTURE.md
+      - Roadmap: ROADMAP.md
+      - Research layer: research.md
+  - Algorithms:
+      - REINFORCE: algorithms/reinforce.md
+      - PPO: algorithms/ppo.md
+      - DQN: algorithms/dqn.md
+      - SAC: algorithms/sac.md
+  - Operations:
+      - Docker: DOCKER.md
+      - Cloud: CLOUD.md
+  - Reproductions:
+      - PPO: reproductions/repro-ppo.md
+      - DQN: reproductions/repro-dqn.md
+      - SAC: reproductions/repro-sac.md
+  - Design records:
+      - M3 consolidation audit: design/m3-consolidation-audit.md
+      - M4A local tracking: design/m4a-local-tracking.md
+      - M4B checkpoint/resume: design/m4b-checkpoint-resume.md
+      - M4C tracker adapters: design/m4c-tracker-adapters.md
+      - M5 DQN: design/m5-dqn.md
+      - M6 SAC: design/m6-sac.md
+      - M7 benchmarks: design/m7-benchmarks.md
+      - M8 scale-out: design/m8-scale-out.md
+      - M9 research layer: design/m9-research-layer.md
+      - M10 release: design/m10-release.md
