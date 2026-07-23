@@ -51,9 +51,7 @@ def run_seed(env_id: str, seed: int, *, double_q: bool = False) -> dict[str, Any
 
     stochastic = evaluate_policy(
         eval_env,
-        lambda obs: epsilon_greedy_action(
-            result.q_net, obs, epsilon=0.05, generator=generator
-        ),
+        lambda obs: epsilon_greedy_action(result.q_net, obs, epsilon=0.05, generator=generator),
         episodes=config.eval_episodes,
     )
     eval_env.close()
@@ -171,8 +169,7 @@ def main() -> None:
         "## Double DQN — CartPole-v1 (configuration-extension check, 2 seeds)",
         "",
         *section_table(sections["cartpole_double"]),
-        "Reproducibility scope: pinned software versions above, CPU, "
-        "comparable hardware only.",
+        "Reproducibility scope: pinned software versions above, CPU, comparable hardware only.",
         "",
         "## Reproduce",
         "",

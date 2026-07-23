@@ -78,8 +78,10 @@ def evaluate_policy(
 
     Args:
         env: Dedicated evaluation env.
-        select_action: Maps a ``[1, obs_dim]`` float32 observation to a
-            ``[1]`` int64 action.
+        select_action: Maps a ``[1, obs_dim]`` float32 observation to an
+            action tensor — ``[1]`` int64 for discrete actors, or a
+            floating ``[1, act_dim]`` tensor for continuous actors (passed
+            to the env as a NumPy vector).
         episodes: Number of episodes, >= 1.
 
     Raises:
@@ -95,7 +97,14 @@ def evaluate_policy(
         terminated = truncated = False
         while not (terminated or truncated):
             obs_t = torch.as_tensor(obs, dtype=torch.float32).unsqueeze(0)
-            obs, reward, terminated, truncated, _ = env.step(int(select_action(obs_t).item()))
+            action_t = select_action(obs_t)
+            # Discrete actors return integer tensors ([1]); continuous
+            # actors return float tensors ([1, act_dim]) passed as arrays.
+            if action_t.is_floating_point():
+                env_action: object = action_t.detach().squeeze(0).cpu().numpy()
+            else:
+                env_action = int(action_t.item())
+            obs, reward, terminated, truncated, _ = env.step(env_action)
             episode_return += float(reward)
             length += 1
         returns.append(episode_return)

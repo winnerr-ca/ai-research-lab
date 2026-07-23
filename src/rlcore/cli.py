@@ -42,7 +42,11 @@ from rlcore.agents.reinforce.policy import CategoricalMlpPolicy
 from rlcore.agents.reinforce.train import ReinforceConfig
 from rlcore.agents.reinforce.train import TrainResult as ReinforceTrainResult
 from rlcore.agents.reinforce.train import train as reinforce_train
-from rlcore.envs import make_discrete_env_pair
+from rlcore.agents.sac.model import SquashedGaussianActor
+from rlcore.agents.sac.train import SacConfig
+from rlcore.agents.sac.train import TrainResult as SacTrainResult
+from rlcore.agents.sac.train import train as sac_train
+from rlcore.envs import make_continuous_env_pair, make_discrete_env_pair
 from rlcore.evaluation import EvalStats, evaluate_policy
 from rlcore.experiments import load_final_model
 from rlcore.tracking import Tracker, make_tracker
@@ -67,6 +71,7 @@ _cs.store(name="train_run", node=TrainRunConfig)
 _cs.store(group="algo", name="reinforce", node=ReinforceConfig)
 _cs.store(group="algo", name="ppo", node=PpoConfig)
 _cs.store(group="algo", name="dqn", node=DqnConfig)
+_cs.store(group="algo", name="sac", node=SacConfig)
 
 
 def dispatch_train(
@@ -76,7 +81,7 @@ def dispatch_train(
     tracker: Tracker | None = None,
 ) -> None:
     """Route a resolved algorithm config to its trainer."""
-    result: ReinforceTrainResult | PpoTrainResult | DqnTrainResult
+    result: ReinforceTrainResult | PpoTrainResult | DqnTrainResult | SacTrainResult
     if isinstance(algo_config, ReinforceConfig):
         result = reinforce_train(
             algo_config, out_dir=out_dir, resume_from=resume_from, tracker=tracker
@@ -85,10 +90,12 @@ def dispatch_train(
         result = ppo_train(algo_config, out_dir=out_dir, resume_from=resume_from, tracker=tracker)
     elif isinstance(algo_config, DqnConfig):
         result = dqn_train(algo_config, out_dir=out_dir, resume_from=resume_from, tracker=tracker)
+    elif isinstance(algo_config, SacConfig):
+        result = sac_train(algo_config, out_dir=out_dir, resume_from=resume_from, tracker=tracker)
     else:
         raise ValueError(
             f"Unknown algorithm config type {type(algo_config).__name__}; "
-            "expected ReinforceConfig, PpoConfig, or DqnConfig."
+            "expected ReinforceConfig, PpoConfig, DqnConfig, or SacConfig."
         )
     logger.info(
         "run %s done: final eval return %.1f +- %.1f | %d env steps | %.1fs",
@@ -146,10 +153,43 @@ def evaluate_run(
     env_id = str(config.env_id)
 
     rng = seed_everything(eval_seed)
-    envs = make_discrete_env_pair(env_id, rng)
     state_dict = load_final_model(run_dir / "final_model.pt", expected_algo=algo)
-
     generator = torch.Generator().manual_seed(eval_seed)
+
+    if algo == "sac":
+        cont = make_continuous_env_pair(env_id, rng)
+        actor = SquashedGaussianActor(
+            cont.obs_dim,
+            cont.act_dim,
+            action_low=torch.as_tensor(cont.action_low),
+            action_high=torch.as_tensor(cont.action_high),
+            hidden_sizes=hidden_sizes,
+        )
+        actor.load_state_dict(state_dict)
+
+        def sac_select(obs: torch.Tensor) -> torch.Tensor:
+            if deterministic:
+                return actor.deterministic_action(obs)
+            with torch.no_grad():
+                action, _ = actor.sample(obs, generator=generator)
+            return action
+
+        stats = evaluate_policy(cont.eval_env, sac_select, episodes=episodes)
+        cont.close()
+        entry = {
+            "run_id": run_record["run_id"],
+            "episodes": episodes,
+            "deterministic": deterministic,
+            "eval_seed": eval_seed,
+            "mean_return": stats.mean_return,
+            "std_return": stats.std_return,
+            "episode_returns": list(stats.episode_returns),
+        }
+        with (run_dir / "evaluations.jsonl").open("a") as stream:
+            stream.write(json.dumps(entry) + "\n")
+        return stats
+
+    envs = make_discrete_env_pair(env_id, rng)
     if algo == "reinforce":
         policy = CategoricalMlpPolicy(envs.obs_dim, envs.n_actions, hidden_sizes=hidden_sizes)
         policy.load_state_dict(state_dict)

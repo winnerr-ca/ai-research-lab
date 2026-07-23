@@ -91,3 +91,58 @@ class ScriptedEnv(gym.Env[NDArray[np.float32], int]):
         terminated = done and self._terminate
         truncated = done and not self._terminate
         return self._obs(), reward, terminated, truncated, {}
+
+
+class ContinuousScriptedEnv(gym.Env[NDArray[np.float32], NDArray[np.float32]]):
+    """Continuous-action counterpart of :class:`ScriptedEnv`.
+
+    Same deterministic scripted-reward semantics; the Box action space has
+    bounds [-1, 1]^act_dim and received actions are recorded for
+    assertions.
+    """
+
+    def __init__(
+        self,
+        rewards: Sequence[float],
+        *,
+        terminate: bool = True,
+        obs_dim: int = 2,
+        act_dim: int = 1,
+    ) -> None:
+        """Configure the scripted episode."""
+        if len(rewards) == 0:
+            raise ValueError("ContinuousScriptedEnv needs at least one reward (one step).")
+        super().__init__()
+        self._rewards = [float(r) for r in rewards]
+        self._terminate = terminate
+        self._step_index = 0
+        self.received_actions: list[NDArray[np.float32]] = []
+        self.observation_space = spaces.Box(
+            low=-np.inf, high=np.inf, shape=(obs_dim,), dtype=np.float32
+        )
+        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(act_dim,), dtype=np.float32)
+
+    def _obs(self) -> NDArray[np.float32]:
+        shape = self.observation_space.shape
+        assert shape is not None
+        return np.full(shape, float(self._step_index), dtype=np.float32)
+
+    def reset(
+        self, *, seed: int | None = None, options: dict[str, Any] | None = None
+    ) -> tuple[NDArray[np.float32], dict[str, Any]]:
+        """Restart the scripted episode; ``seed`` is accepted and irrelevant."""
+        super().reset(seed=seed)
+        self._step_index = 0
+        return self._obs(), {}
+
+    def step(
+        self, action: NDArray[np.float32]
+    ) -> tuple[NDArray[np.float32], SupportsFloat, bool, bool, dict[str, Any]]:
+        """Advance one step, emitting the scripted reward for this step."""
+        self.received_actions.append(np.asarray(action, dtype=np.float32))
+        reward = self._rewards[self._step_index]
+        self._step_index += 1
+        done = self._step_index >= len(self._rewards)
+        terminated = done and self._terminate
+        truncated = done and not self._terminate
+        return self._obs(), reward, terminated, truncated, {}

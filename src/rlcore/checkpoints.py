@@ -136,11 +136,18 @@ def check_resume_config(
     Raises:
         ValueError: Listing exactly which fields differ.
     """
+
+    def fields_equal(a: object, b: object) -> bool:
+        # NaN sentinels (e.g. SAC's target_entropy="auto") must compare equal.
+        if isinstance(a, float) and isinstance(b, float) and a != a and b != b:
+            return True
+        return bool(a == b)
+
     mutable = {budget_field, "checkpoint_every"}
     mismatched = sorted(
         key
         for key in stored.keys() | requested.keys()
-        if key not in mutable and stored.get(key) != requested.get(key)
+        if key not in mutable and not fields_equal(stored.get(key), requested.get(key))
     )
     if mismatched:
         details = ", ".join(
