@@ -30,6 +30,10 @@ from hydra.core.config_store import ConfigStore
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import MISSING, OmegaConf
 
+from rlcore.agents.dqn.model import QNetwork, epsilon_greedy_action
+from rlcore.agents.dqn.train import DqnConfig
+from rlcore.agents.dqn.train import TrainResult as DqnTrainResult
+from rlcore.agents.dqn.train import train as dqn_train
 from rlcore.agents.ppo.model import ActorCritic
 from rlcore.agents.ppo.train import PpoConfig
 from rlcore.agents.ppo.train import TrainResult as PpoTrainResult
@@ -62,6 +66,7 @@ _cs = ConfigStore.instance()
 _cs.store(name="train_run", node=TrainRunConfig)
 _cs.store(group="algo", name="reinforce", node=ReinforceConfig)
 _cs.store(group="algo", name="ppo", node=PpoConfig)
+_cs.store(group="algo", name="dqn", node=DqnConfig)
 
 
 def dispatch_train(
@@ -71,17 +76,19 @@ def dispatch_train(
     tracker: Tracker | None = None,
 ) -> None:
     """Route a resolved algorithm config to its trainer."""
-    result: ReinforceTrainResult | PpoTrainResult
+    result: ReinforceTrainResult | PpoTrainResult | DqnTrainResult
     if isinstance(algo_config, ReinforceConfig):
         result = reinforce_train(
             algo_config, out_dir=out_dir, resume_from=resume_from, tracker=tracker
         )
     elif isinstance(algo_config, PpoConfig):
         result = ppo_train(algo_config, out_dir=out_dir, resume_from=resume_from, tracker=tracker)
+    elif isinstance(algo_config, DqnConfig):
+        result = dqn_train(algo_config, out_dir=out_dir, resume_from=resume_from, tracker=tracker)
     else:
         raise ValueError(
             f"Unknown algorithm config type {type(algo_config).__name__}; "
-            "expected ReinforceConfig or PpoConfig."
+            "expected ReinforceConfig, PpoConfig, or DqnConfig."
         )
     logger.info(
         "run %s done: final eval return %.1f +- %.1f | %d env steps | %.1fs",
@@ -156,6 +163,16 @@ def evaluate_run(
 
         def select_action(obs: torch.Tensor) -> torch.Tensor:
             return model.act(obs, generator=generator, deterministic=deterministic)[0]
+
+    elif algo == "dqn":
+        q_net = QNetwork(envs.obs_dim, envs.n_actions, hidden_sizes=hidden_sizes)
+        q_net.load_state_dict(state_dict)
+        # Stochastic evaluation for a value-based policy means eps-greedy
+        # with a small fixed epsilon (documented; DQN has no action dist).
+        eval_epsilon = 0.0 if deterministic else 0.05
+
+        def select_action(obs: torch.Tensor) -> torch.Tensor:
+            return epsilon_greedy_action(q_net, obs, epsilon=eval_epsilon, generator=generator)
 
     else:
         raise ValueError(f"run.json names unknown algorithm {algo!r}.")
