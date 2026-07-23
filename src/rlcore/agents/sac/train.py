@@ -44,6 +44,7 @@ from rlcore.evaluation import EvalStats, evaluate_policy
 from rlcore.experiments import new_run_id, save_final_model, write_run_outputs, write_run_record
 from rlcore.replay import ReplayBuffer
 from rlcore.reporting import write_summary
+from rlcore.utils.device import resolve_device
 from rlcore.utils.seeding import Rng, restore_rng, rng_state, seed_everything
 
 if TYPE_CHECKING:
@@ -83,6 +84,9 @@ class SacConfig:
             reaches this mean return (``None`` disables).
         checkpoint_every: Write ``checkpoint.pt`` every this many env steps;
             multiple of ``log_every`` (0 disables; requires ``out_dir``).
+        device: ``"cpu"`` (default, the tested reproducibility bar),
+            ``"cuda[:N]"`` (falls back to CPU with a warning when
+            unavailable), or ``"auto"``.
     """
 
     env_id: str = "Pendulum-v1"
@@ -104,6 +108,7 @@ class SacConfig:
     eval_episodes: int = 10
     stop_return: float | None = -180.0
     checkpoint_every: int = 0
+    device: str = "cpu"
 
 
 @dataclass(frozen=True, slots=True)
@@ -287,6 +292,7 @@ def train(
     """
     start_time = time.perf_counter()
     _validate_schedule(config)
+    device = resolve_device(config.device)
     if config.checkpoint_every > 0 and out_dir is None:
         raise ValueError("checkpoint_every > 0 requires out_dir (checkpoints live there).")
 
@@ -326,7 +332,7 @@ def train(
             list(q1.parameters()) + list(q2.parameters()), lr=config.lr
         )
         critic_optimizer.load_state_dict(payload["critic_optimizer"])
-        log_alpha = payload["log_alpha"].clone().requires_grad_(config.auto_alpha)
+        log_alpha = payload["log_alpha"].to(device).clone().requires_grad_(config.auto_alpha)
         alpha_optimizer = None
         if config.auto_alpha:
             alpha_optimizer = torch.optim.Adam([log_alpha], lr=config.lr)
@@ -356,7 +362,7 @@ def train(
         critic_optimizer = torch.optim.Adam(
             list(q1.parameters()) + list(q2.parameters()), lr=config.lr
         )
-        log_alpha = torch.zeros((), requires_grad=config.auto_alpha)
+        log_alpha = torch.zeros((), device=device, requires_grad=config.auto_alpha)
         if not config.auto_alpha:
             with torch.no_grad():
                 log_alpha.fill_(math.log(config.fixed_alpha))
@@ -374,6 +380,8 @@ def train(
 
     for param in list(q1_target.parameters()) + list(q2_target.parameters()):
         param.requires_grad_(False)
+    for module in (actor, q1, q2, q1_target, q2_target):
+        module.to(device)
 
     target_entropy = (
         -float(envs.act_dim) if math.isnan(config.target_entropy) else config.target_entropy
@@ -397,14 +405,14 @@ def train(
     step = start_step - 1
 
     for step in range(start_step, config.total_steps + 1):
-        obs_t = torch.as_tensor(obs, dtype=torch.float32).unsqueeze(0)
+        obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device).unsqueeze(0)
         if step <= config.warmup_steps:
             uniform = torch.rand(envs.act_dim, generator=rng.torch)
             action_np = (action_low_t + uniform * action_range_t).numpy()
         else:
             with torch.no_grad():
                 action_t, _ = actor.sample(obs_t, generator=rng.torch)
-            action_np = action_t.squeeze(0).numpy()
+            action_np = action_t.squeeze(0).cpu().numpy()
         next_obs, reward, terminated, truncated, _ = env.step(action_np)
         buffer.add(
             np.asarray(obs, dtype=np.float32),
@@ -422,7 +430,7 @@ def train(
             obs = next_obs
 
         if step > config.warmup_steps and step % config.train_freq == 0:
-            batch = buffer.sample(config.batch_size, generator=rng.torch)
+            batch = buffer.sample(config.batch_size, generator=rng.torch).to(device)
             metrics = sac_update(
                 actor=actor,
                 q1=q1,
@@ -458,7 +466,7 @@ def train(
             if config.eval_every > 0 and step % config.eval_every == 0:
                 stats = evaluate_policy(
                     envs.eval_env,
-                    lambda obs: actor.deterministic_action(obs),
+                    lambda obs: actor.deterministic_action(obs.to(device)),
                     episodes=config.eval_episodes,
                 )
                 entry["eval_return_mean"] = stats.mean_return
@@ -511,7 +519,7 @@ def train(
     total_env_steps = step
     final_eval = evaluate_policy(
         envs.eval_env,
-        lambda obs: actor.deterministic_action(obs),
+        lambda obs: actor.deterministic_action(obs.to(device)),
         episodes=config.eval_episodes,
     )
     result = TrainResult(

@@ -33,6 +33,10 @@ from rlcore.agents.ppo.loss import (
 )
 from rlcore.agents.ppo.model import ActorCritic
 from rlcore.agents.ppo.rollout import RolloutCollector
+from rlcore.agents.ppo.vector_rollout import (
+    VectorRolloutCollector,
+    make_vector_train_env,
+)
 from rlcore.checkpoints import (
     check_resume_config,
     load_checkpoint,
@@ -44,9 +48,12 @@ from rlcore.envs import EnvPair, env_pair_from_envs, make_discrete_env_pair
 from rlcore.evaluation import EvalStats, evaluate_policy
 from rlcore.experiments import new_run_id, save_final_model, write_run_outputs, write_run_record
 from rlcore.reporting import write_summary
+from rlcore.utils.device import resolve_device
 from rlcore.utils.seeding import Rng, restore_rng, rng_state, seed_everything
 
 if TYPE_CHECKING:
+    from gymnasium.vector import SyncVectorEnv
+
     from rlcore.tracking import Tracker
     from rlcore.types import Batch
 
@@ -89,6 +96,13 @@ class PpoConfig:
         checkpoint_every: Write a resumable ``checkpoint.pt`` into the run
             directory every this many updates (0 disables; requires
             ``out_dir``).
+        n_envs: Parallel training envs (``SyncVectorEnv``, SAME_STEP
+            autoreset). ``n_steps`` stays the TOTAL batch per update and
+            must be divisible by ``n_envs``, so budgets are comparable
+            across env counts. Env *i* uses child seed ``10 + i``.
+        device: ``"cpu"`` (default, the tested reproducibility bar),
+            ``"cuda[:N]"`` (falls back to CPU with a warning when
+            unavailable), or ``"auto"``.
     """
 
     env_id: str = "CartPole-v1"
@@ -111,6 +125,8 @@ class PpoConfig:
     eval_episodes: int = 20
     stop_return: float | None = 475.0
     checkpoint_every: int = 0
+    n_envs: int = 1
+    device: str = "cpu"
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,7 +255,8 @@ def _checkpoint_payload(
     optimizer: torch.optim.Optimizer,
     rng: Rng,
     envs: EnvPair,
-    collector: RolloutCollector,
+    collector: RolloutCollector | VectorRolloutCollector,
+    vector_env: SyncVectorEnv | None = None,
 ) -> dict[str, Any]:
     """Assemble the M4B checkpoint payload for PPO's state."""
     return {
@@ -254,6 +271,7 @@ def _checkpoint_payload(
         "collector": collector.state(),
         "train_env": pickle_env(envs.train_env),
         "eval_env": pickle_env(envs.eval_env),
+        "vector_env": None if vector_env is None else pickle_env(cast("Any", vector_env)),
     }
 
 
@@ -287,6 +305,13 @@ def train(
     start = time.perf_counter()
     if config.checkpoint_every > 0 and out_dir is None:
         raise ValueError("checkpoint_every > 0 requires out_dir (checkpoints live there).")
+    if config.n_envs < 1:
+        raise ValueError(f"n_envs must be >= 1, got {config.n_envs}.")
+    if config.n_envs > 1 and config.n_steps % config.n_envs != 0:
+        raise ValueError(
+            f"n_steps ({config.n_steps}) must be divisible by n_envs ({config.n_envs})."
+        )
+    device = resolve_device(config.device)
 
     if resume_from is not None:
         payload = load_checkpoint(resume_from, expected_algo="ppo")
@@ -298,9 +323,17 @@ def train(
         )
         model = ActorCritic(envs.obs_dim, envs.n_actions, hidden_sizes=config.hidden_sizes)
         model.load_state_dict(payload["model"])
+        model.to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
         optimizer.load_state_dict(payload["optimizer"])
-        collector = RolloutCollector(envs.train_env)
+        collector: RolloutCollector | VectorRolloutCollector
+        vector_env: SyncVectorEnv | None
+        if config.n_envs > 1:
+            vector_env = cast("SyncVectorEnv", unpickle_env(payload["vector_env"]))
+            collector = VectorRolloutCollector(vector_env)
+        else:
+            vector_env = None
+            collector = RolloutCollector(envs.train_env)
         collector.restore_state(payload["collector"])
         history = payload["history"]
         total_env_steps = int(payload["total_env_steps"])
@@ -310,8 +343,14 @@ def train(
         rng = seed_everything(config.seed)
         envs = make_discrete_env_pair(config.env_id, rng)
         model = ActorCritic(envs.obs_dim, envs.n_actions, hidden_sizes=config.hidden_sizes)
+        model.to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
-        collector = RolloutCollector(envs.train_env)
+        if config.n_envs > 1:
+            vector_env = make_vector_train_env(config.env_id, config.n_envs, rng)
+            collector = VectorRolloutCollector(vector_env)
+        else:
+            vector_env = None
+            collector = RolloutCollector(envs.train_env)
         history = []
         total_env_steps = 0
         start_update = 1
@@ -327,18 +366,40 @@ def train(
     stopped_early = False
 
     for update in range(start_update, config.total_updates + 1):
-        rollout = collector.collect(model, config.n_steps, generator=rng.torch)
-        total_env_steps += len(rollout.batch)
-
-        advantages, value_targets = compute_gae(
-            rollout.batch.reward,
-            rollout.batch.value,
-            rollout.batch.next_value,
-            rollout.batch.done,
-            gamma=config.gamma,
-            lam=config.gae_lambda,
-        )
-        data = rollout.batch.with_fields(advantage=advantages, value_target=value_targets)
+        if isinstance(collector, VectorRolloutCollector):
+            vrollout = collector.collect(
+                model, config.n_steps // config.n_envs, generator=rng.torch
+            )
+            batch = vrollout.batch
+            completed_returns = vrollout.completed_returns
+            # GAE per env column: no temporal chain crosses environments.
+            columns = [
+                compute_gae(
+                    vrollout.per_env["reward"][:, col],
+                    vrollout.per_env["value"][:, col],
+                    vrollout.per_env["next_value"][:, col],
+                    vrollout.per_env["done"][:, col],
+                    gamma=config.gamma,
+                    lam=config.gae_lambda,
+                )
+                for col in range(config.n_envs)
+            ]
+            advantages = torch.stack([adv for adv, _ in columns], dim=1).reshape(-1)
+            value_targets = torch.stack([vt for _, vt in columns], dim=1).reshape(-1)
+        else:
+            rollout = collector.collect(model, config.n_steps, generator=rng.torch)
+            batch = rollout.batch
+            completed_returns = rollout.completed_returns
+            advantages, value_targets = compute_gae(
+                batch.reward,
+                batch.value,
+                batch.next_value,
+                batch.done,
+                gamma=config.gamma,
+                lam=config.gae_lambda,
+            )
+        total_env_steps += len(batch)
+        data = batch.with_fields(advantage=advantages, value_target=value_targets).to(device)
 
         metrics = ppo_update(
             model,
@@ -354,23 +415,19 @@ def train(
             target_kl=config.target_kl,
             generator=rng.torch,
         )
-        train_return = (
-            statistics.mean(rollout.completed_returns)
-            if rollout.completed_returns
-            else float("nan")
-        )
+        train_return = statistics.mean(completed_returns) if completed_returns else float("nan")
         entry: dict[str, float] = {
             "update": float(update),
             "env_steps": float(total_env_steps),
             "train_return_mean": train_return,
-            "explained_variance": explained_variance(rollout.batch.value, value_targets),
+            "explained_variance": explained_variance(batch.value, value_targets),
             **metrics,
         }
 
         if config.eval_every > 0 and update % config.eval_every == 0:
             stats = evaluate_policy(
                 envs.eval_env,
-                lambda obs: model.act(obs, deterministic=True)[0],
+                lambda obs: model.act(obs.to(device), deterministic=True)[0],
                 episodes=config.eval_episodes,
             )
             entry["eval_return_mean"] = stats.mean_return
@@ -409,12 +466,13 @@ def train(
                     rng=rng,
                     envs=envs,
                     collector=collector,
+                    vector_env=vector_env,
                 ),
             )
 
     final_eval = evaluate_policy(
         envs.eval_env,
-        lambda obs: model.act(obs, deterministic=True)[0],
+        lambda obs: model.act(obs.to(device), deterministic=True)[0],
         episodes=config.eval_episodes,
     )
     result = TrainResult(

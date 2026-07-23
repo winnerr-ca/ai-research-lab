@@ -95,7 +95,10 @@ class SquashedGaussianActor(nn.Module):
         """
         mu, log_std = self._mu_log_std(obs)
         std = log_std.exp()
-        noise = torch.randn(mu.shape, generator=generator, dtype=mu.dtype, device=mu.device)
+        noise_device = generator.device if generator is not None else mu.device
+        noise = torch.randn(mu.shape, generator=generator, dtype=mu.dtype, device=noise_device).to(
+            mu.device
+        )
         pre_tanh = mu + std * noise
         squashed = torch.tanh(pre_tanh)
         action = squashed * self.action_scale + self.action_bias

@@ -89,7 +89,9 @@ class ActorCritic(nn.Module):
         if deterministic:
             action = log_probs.argmax(dim=-1)
         else:
-            action = torch.multinomial(log_probs.exp(), num_samples=1, generator=generator).squeeze(
-                -1
+            action = (
+                torch.multinomial(log_probs.exp().cpu(), num_samples=1, generator=generator)
+                .squeeze(-1)
+                .to(log_probs.device)
             )
         return action, gather_log_prob(log_probs, action), self.value(obs)

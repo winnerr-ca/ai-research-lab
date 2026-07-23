@@ -1,0 +1,29 @@
+# CUDA image for rlcore training runs — DOCUMENTED BUILD, NOT CI-VERIFIED.
+#
+# This build has not been executed in the project's development
+# environment (no GPU available there); it follows the standard
+# nvidia-base + CUDA-wheel pattern and should be validated on a GPU host
+# before relying on it. See docs/CLOUD.md.
+#
+# Build:  docker build -f Dockerfile.cuda -t rlcore:cuda .
+# Run:    docker run --rm --gpus all -v "$(pwd)/outputs:/app/outputs" \
+#             rlcore:cuda algo=sac algo.device=cuda
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3.11 python3.11-venv ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+ENV UV_LINK_MODE=copy UV_PYTHON=python3.11
+
+COPY pyproject.toml uv.lock README.md LICENSE ./
+COPY src ./src
+# The project lockfile pins CPU-agnostic PyPI wheels; on Linux these are
+# the CUDA-enabled builds, so no index override is needed.
+RUN uv sync --frozen --no-dev --no-install-project && uv pip install --no-deps -e .
+
+ENV PATH="/app/.venv/bin:$PATH"
+ENTRYPOINT ["rlcore-train"]

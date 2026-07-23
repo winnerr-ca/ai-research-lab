@@ -75,6 +75,8 @@ def epsilon_greedy_action(
     if epsilon == 0.0:
         return greedy
     batch = obs.shape[0]
-    explore = torch.rand(batch, generator=generator) < epsilon
-    random_actions = torch.randint(0, q_net.n_actions, (batch,), generator=generator)
+    explore = (torch.rand(batch, generator=generator) < epsilon).to(greedy.device)
+    random_actions = torch.randint(0, q_net.n_actions, (batch,), generator=generator).to(
+        greedy.device
+    )
     return torch.where(explore, random_actions, greedy)

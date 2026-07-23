@@ -39,6 +39,7 @@ from rlcore.evaluation import EvalStats, evaluate_policy
 from rlcore.experiments import new_run_id, save_final_model, write_run_outputs, write_run_record
 from rlcore.replay import ReplayBuffer
 from rlcore.reporting import write_summary
+from rlcore.utils.device import resolve_device
 from rlcore.utils.seeding import Rng, restore_rng, rng_state, seed_everything
 
 if TYPE_CHECKING:
@@ -82,6 +83,9 @@ class DqnConfig:
         checkpoint_every: Write ``checkpoint.pt`` every this many env steps;
             must be a multiple of ``log_every`` (0 disables; requires
             ``out_dir``).
+        device: ``"cpu"`` (default, the tested reproducibility bar),
+            ``"cuda[:N]"`` (falls back to CPU with a warning when
+            unavailable), or ``"auto"``.
     """
 
     env_id: str = "CartPole-v1"
@@ -105,6 +109,7 @@ class DqnConfig:
     eval_episodes: int = 20
     stop_return: float | None = 475.0
     checkpoint_every: int = 0
+    device: str = "cpu"
 
 
 @dataclass(frozen=True, slots=True)
@@ -254,6 +259,7 @@ def train(
     """
     start_time = time.perf_counter()
     _validate_schedule(config)
+    device = resolve_device(config.device)
     if config.checkpoint_every > 0 and out_dir is None:
         raise ValueError("checkpoint_every > 0 requires out_dir (checkpoints live there).")
 
@@ -269,6 +275,8 @@ def train(
         q_net.load_state_dict(payload["model"])
         target_net = QNetwork(envs.obs_dim, envs.n_actions, hidden_sizes=config.hidden_sizes)
         target_net.load_state_dict(payload["target_model"])
+        q_net.to(device)
+        target_net.to(device)
         optimizer = torch.optim.Adam(q_net.parameters(), lr=config.lr)
         optimizer.load_state_dict(payload["optimizer"])
         buffer = ReplayBuffer(config.buffer_capacity, obs_shape=(envs.obs_dim,))
@@ -284,6 +292,8 @@ def train(
         q_net = QNetwork(envs.obs_dim, envs.n_actions, hidden_sizes=config.hidden_sizes)
         target_net = QNetwork(envs.obs_dim, envs.n_actions, hidden_sizes=config.hidden_sizes)
         target_net.load_state_dict(q_net.state_dict())
+        q_net.to(device)
+        target_net.to(device)
         optimizer = torch.optim.Adam(q_net.parameters(), lr=config.lr)
         buffer = ReplayBuffer(config.buffer_capacity, obs_shape=(envs.obs_dim,))
         history = []
@@ -315,7 +325,7 @@ def train(
         epsilon = linear_epsilon(
             step, start=config.eps_start, final=config.eps_final, decay_steps=decay_steps
         )
-        obs_t = torch.as_tensor(obs, dtype=torch.float32).unsqueeze(0)
+        obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device).unsqueeze(0)
         if step <= config.warmup_steps:
             action = int(torch.randint(0, envs.n_actions, (1,), generator=rng.torch).item())
         else:
@@ -335,7 +345,7 @@ def train(
             obs = next_obs
 
         if step > config.warmup_steps and step % config.train_freq == 0:
-            batch = buffer.sample(config.batch_size, generator=rng.torch)
+            batch = buffer.sample(config.batch_size, generator=rng.torch).to(device)
             metrics = dqn_update(
                 q_net,
                 target_net,
@@ -367,7 +377,7 @@ def train(
             if config.eval_every > 0 and step % config.eval_every == 0:
                 stats = evaluate_policy(
                     envs.eval_env,
-                    lambda obs: q_net.greedy_action(obs),
+                    lambda obs: q_net.greedy_action(obs.to(device)),
                     episodes=config.eval_episodes,
                 )
                 entry["eval_return_mean"] = stats.mean_return
@@ -414,7 +424,7 @@ def train(
     total_env_steps = step
     final_eval = evaluate_policy(
         envs.eval_env,
-        lambda obs: q_net.greedy_action(obs),
+        lambda obs: q_net.greedy_action(obs.to(device)),
         episodes=config.eval_episodes,
     )
     result = TrainResult(
