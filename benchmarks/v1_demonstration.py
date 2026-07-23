@@ -390,7 +390,8 @@ def main() -> None:
         "| # | Item | Status | Evidence |",
         "|---|---|---|---|",
         *[
-            f"| {r['item']} | {r['name']} | {r['status']} | {r['evidence'].replace('|', '/')} |"
+            f"| {r['item']} | {r['name']} | {r['status']} "
+            f"| {r['evidence'].replace('|', '/').replace(chr(10), ' ')} |"
             for r in RESULTS
         ],
         "",

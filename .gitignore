@@ -17,3 +17,6 @@ build/
 outputs/
 wandb/
 mlruns/
+
+# mkdocs build output
+site/

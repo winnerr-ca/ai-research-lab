@@ -7,6 +7,7 @@ theme:
   name: mkdocs
 nav:
   - Overview:
+      - Final report (v1.0): FINAL-REPORT.md
       - Architecture: ARCHITECTURE.md
       - Roadmap: ROADMAP.md
       - Research layer: research.md
