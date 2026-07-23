@@ -16,9 +16,11 @@ Delivered: `rlcore.agents.ppo.vector_rollout` (Gymnasium `SyncVectorEnv`
 in `SAME_STEP` autoreset mode, exact per-env boundary handling,
 per-column GAE, deterministic child seeding `10 + i`, picklable env
 factories for exact resume); `PpoConfig.n_envs`; `rlcore.utils.device`
-with `device` config fields on PPO/DQN/SAC; CPU `Dockerfile` (built and
-run here — see `benchmarks/results/m8_docker.md`) and documented
-unverified `Dockerfile.cuda`; `docs/DOCKER.md` + `docs/CLOUD.md`
+with `device` config fields on PPO/DQN/SAC; CPU `Dockerfile` and `Dockerfile.cuda`, both
+*documented but unverified here*: the environment's network policy
+blocks every container-registry blob CDN (three registries attempted;
+denials recorded in `benchmarks/results/m8_docker.md`), and no GPU
+exists for the CUDA image; `docs/DOCKER.md` + `docs/CLOUD.md`
 (interruption recovery included); `benchmarks/m8_throughput.py` with
 recorded results. Non-goals held: no distributed framework, no async
 vector envs, no GPU performance claims (no GPU was available to
@@ -26,7 +28,9 @@ measure).
 
 Acceptance: vector boundary tests exact on scripted envs; vector
 fresh-process resume test; device fallback tests; canonical gate green;
-throughput profile recorded from a clean commit.
+throughput profile recorded from a clean commit. The container-build
+acceptance item was *not met in this environment* and is recorded as
+blocked, not as passed.
 
 ## The boundary contract under SAME_STEP autoreset
 

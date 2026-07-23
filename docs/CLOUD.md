@@ -8,8 +8,8 @@ documents the three things that matter when you do that.
 
 ## 1. Use the containers
 
-Build the CPU image (verified) or CUDA image (documented, unverified —
-see `docs/DOCKER.md`) and run it with your scheduler's volume mount for
+Build the CPU image or CUDA image (both documented; neither could be
+built in the development environment — see `docs/DOCKER.md`) and run it with your scheduler's volume mount for
 `outputs/`. All state a run needs to survive preemption lives in its run
 directory.
 

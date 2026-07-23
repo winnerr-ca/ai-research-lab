@@ -176,3 +176,4 @@ states what was actually done and why.
 | 5 | done | `m5-dqn.md` | `m5_dqn.*` (CartPole 4/5 seeds, Acrobot 5/5; failures reported) |
 | 6 | done | `m6-sac.md` | `m6_sac.*` (Pendulum 4/5 auto-α seeds; miss reported) |
 | 7 | done | `m7-benchmarks.md` | `m7_benchmark.*` (12/12 cells ok, clean commit) |
+| 8 | done | `m8-scale-out.md` | `m8_throughput.*` (measured; vectorization honestly not a speedup at this scale), `m8_docker.md` (container build blocked by env network policy — recorded) |

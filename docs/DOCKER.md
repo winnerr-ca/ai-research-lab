@@ -4,7 +4,7 @@ Two images are defined at the repository root:
 
 | File | Base | Status |
 |---|---|---|
-| `Dockerfile` | `python:3.11-slim` (CPU) | **Built and run in CI-equivalent checks** — the M8 record (`benchmarks/results/m8_docker.md`) shows the exact build and a real training run inside the container. |
+| `Dockerfile` | `python:3.11-slim` (CPU) | **Documented, not yet verified** — the development environment's network policy denies all container-registry blob downloads (Docker Hub, ECR Public, and GHCR were each attempted; see `benchmarks/results/m8_docker.md` for the recorded denials). Build it on a host with registry access. |
 | `Dockerfile.cuda` | `nvidia/cuda:12.4.1-runtime-ubuntu22.04` | **Documented, not verified** — the development environment has no GPU, so this build follows the standard pattern but has not been executed. Validate on a GPU host before relying on it. |
 
 ## CPU image

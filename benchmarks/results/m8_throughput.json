@@ -1,0 +1,31 @@
+{
+  "environment": {
+    "rlcore": "0.0.1",
+    "python": "3.11.15",
+    "torch": "2.13.0+cu130",
+    "gymnasium": "1.3.0",
+    "numpy": "2.4.6",
+    "hydra": "1.3.4",
+    "platform": "Linux-6.18.5-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "device": "cpu",
+    "cuda_available": "False",
+    "commit": "3d65e36d5c67167e2cf79c9c14d116269a780c5b",
+    "git_dirty": "False"
+  },
+  "env_id": "CartPole-v1",
+  "torch_threads": 4,
+  "raw_env_steps_per_s": 115509.7,
+  "collection_steps_per_s": {
+    "1": 2964.9,
+    "2": 2167.7,
+    "4": 5357.7,
+    "8": 8694.0
+  },
+  "ppo_train_steps_per_s": {
+    "1": 779.5,
+    "4": 635.2
+  },
+  "dqn_train_steps_per_s": 331.4,
+  "peak_rss_mb": 674.2
+}
