@@ -30,7 +30,8 @@ from rlcore.agents.reinforce.returns import discounted_returns
 from rlcore.agents.reinforce.rollout import collect_episode
 from rlcore.envs import make_discrete_env_pair
 from rlcore.evaluation import EvalStats, evaluate_policy
-from rlcore.experiments import write_run_outputs
+from rlcore.experiments import new_run_id, save_final_model, write_run_outputs, write_run_record
+from rlcore.reporting import write_summary
 from rlcore.utils.seeding import seed_everything
 
 if TYPE_CHECKING:
@@ -80,6 +81,7 @@ class TrainResult:
     """Outcome of one training run.
 
     Attributes:
+        run_id: Unique run identifier (rlcore.experiments.new_run_id).
         policy: The trained policy (for further evaluation by callers).
         final_eval: Greedy evaluation after the last update.
         history: Per-update metric dicts, in order.
@@ -89,6 +91,7 @@ class TrainResult:
         wall_time_s: Wall-clock training duration in seconds.
     """
 
+    run_id: str
     policy: CategoricalMlpPolicy
     final_eval: EvalStats
     history: list[dict[str, float]]
@@ -180,6 +183,7 @@ def train(config: ReinforceConfig, out_dir: Path | None = None) -> TrainResult:
         The :class:`TrainResult`, including the final greedy evaluation.
     """
     start = time.perf_counter()
+    run_id = new_run_id("reinforce", config.env_id, config.seed)
     rng = seed_everything(config.seed)
     envs = make_discrete_env_pair(config.env_id, rng)
     env = envs.train_env
@@ -249,6 +253,7 @@ def train(config: ReinforceConfig, out_dir: Path | None = None) -> TrainResult:
         episodes=config.eval_episodes,
     )
     result = TrainResult(
+        run_id=run_id,
         policy=policy,
         final_eval=final_eval,
         history=history,
@@ -260,11 +265,15 @@ def train(config: ReinforceConfig, out_dir: Path | None = None) -> TrainResult:
     envs.close()
 
     if out_dir is not None:
+        write_run_record(
+            out_dir, run_id=run_id, algo="reinforce", env_id=config.env_id, seed=config.seed
+        )
         write_run_outputs(
             out_dir,
             config,
             history,
             {
+                "run_id": run_id,
                 "final_eval_return_mean": final_eval.mean_return,
                 "final_eval_return_std": final_eval.std_return,
                 "final_eval_returns": list(final_eval.episode_returns),
@@ -273,6 +282,19 @@ def train(config: ReinforceConfig, out_dir: Path | None = None) -> TrainResult:
                 "stopped_early": stopped_early,
                 "wall_time_s": result.wall_time_s,
             },
+        )
+        save_final_model(out_dir, algo="reinforce", state_dict=policy.state_dict())
+        write_summary(
+            out_dir,
+            run_id=run_id,
+            algo="reinforce",
+            env_id=config.env_id,
+            seed=config.seed,
+            history=history,
+            final_eval=final_eval,
+            total_env_steps=total_env_steps,
+            stopped_early=stopped_early,
+            wall_time_s=result.wall_time_s,
         )
     return result
 

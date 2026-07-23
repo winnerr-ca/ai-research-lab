@@ -32,6 +32,22 @@ reference implementations, and multi-seed statistical evaluation treated as
 core features. Shared abstractions are extracted from working algorithm
 implementations rather than designed up front.
 
+## Usage
+
+```sh
+# Train (algorithm is a Hydra config group; any field is overridable)
+rlcore-train algo=ppo
+rlcore-train algo=reinforce algo.seed=3 algo.lr=0.005
+
+# Re-evaluate a finished run from its run directory
+rlcore-evaluate outputs/<date>/<time>/ --episodes 50
+```
+
+Every run writes a self-describing local run directory (identity, resolved
+config, git/version/device provenance, JSONL metrics, final model,
+summary + learning-curve plot) — no external account required. See
+`docs/design/m4a-local-tracking.md` for the layout.
+
 ## Planned stack
 
 Python · PyTorch · Gymnasium · Hydra · Weights & Biases (adapter-based, MLflow
