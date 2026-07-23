@@ -329,9 +329,12 @@ and thus replaceable — e.g. a future distributed engine).
 - Evaluation runs on **separate env instances with fixed eval seeds**, frozen
   normalization statistics, and both deterministic and stochastic action
   modes (reported separately — they answer different questions).
-- Aggregate metrics module implementing the rliable protocol: IQM, optimality
-  gap, stratified bootstrap CIs, performance profiles. This is what
-  "compare algorithms fairly" means operationally.
+- Aggregate metrics following the rliable protocol: IQM, optimality gap,
+  stratified bootstrap CIs, performance profiles. This is what "compare
+  algorithms fairly" means operationally. Scheduled for the benchmark
+  milestone (M6), when multiple algorithms and environments exist; the
+  rliable upstream repository is archived, so it is used only behind a
+  small, tested adapter with a pinned version.
 
 ### 6.7 Experiment Manager — `rlcore.experiments`
 

@@ -35,9 +35,11 @@ Two rules drive the sequence:
 | 1 | **Vertical slice: REINFORCE** | End-to-end training on CartPole: minimal env setup, small policy net, simple collector, train script with minimal Hydra config; plumbing deliberately inline | 0 |
 | 2 | **PPO + verification** | GAE (with corrected invariant tests), clipped objective, minibatch epochs; SB3 loss parity; multi-seed classic-control verification | 1 |
 | 3 | **Consolidation audit** | Duplication audit over the two working algorithms (`docs/design/m3-consolidation-audit.md`); extractions the audit justified: env creation + seed layout, evaluation, run outputs/metadata, small network helpers. Collectors and training loops stayed local (audited: no stable common structure); action-sampling unification deferred (bitwise RNG preservation); wrappers/vectorization/normalization deferred to the milestone that needs them | 2 |
-| 4 | **Experiment infrastructure** | Tracker adapters (W&B/MLflow/offline), full checkpoint contract (ARCHITECTURE §6.9) incl. resume-equals-continuous test, evaluation engine with rliable metrics, mature Hydra tree | 3 |
-| 5 | **Off-policy: DQN → SAC** | Replay buffer (built now, when needed), target networks, n-step transforms, continuous control; consolidation pass 2 for the off-policy data path | 4 |
-| 6 | **Benchmark & reproduction harness** | Standard eval suites, multi-seed benchmark runs vs. published results, committed results tables, Optuna sweeps, Docker image for reproducible benchmarks | 5 |
+| 4A | **Experiment config & local tracking** | Compact Hydra config with a unified `rlcore-train` entry point and an `rlcore-evaluate` counterpart; unique run identity; resolved config, git commit + dirty state, package/device/OS metadata; standard run-directory structure (run record, JSONL metrics, final-model artifact, summary + learning-curve plot); fully local, no external account | 3 |
+| 4B | **Checkpoint & resume** | Checkpoint contract for the *existing* REINFORCE/PPO state only: model, optimizer, progress counters, RNG states, config, run identity, collector/episode state; atomic writes, schema versioning, clear validation errors; gate test: continuous 2N ≡ N + save + fresh-process restore + N on pinned CPU; env-state boundary documented | 4A |
+| 4C | **Optional tracker adapters** | W&B and MLflow behind a `Tracker` protocol as optional dependencies; offline/local backends by default; credentials never required for normal operation; the same train command verified to work local-only | 4B |
+| 5 | **Off-policy: DQN → SAC** | Replay buffer (built now, when needed), target networks, n-step transforms, continuous control; consolidation pass 2 for the off-policy data path | 4C |
+| 6 | **Benchmark & reproduction harness** | Standard eval suites, multi-seed benchmark runs vs. published results, committed results tables, Optuna sweeps, Docker image for reproducible benchmarks; rliable aggregate metrics arrive here — its upstream repository is archived, so it sits behind a small tested adapter with a pinned version | 5 |
 | 7 | **Scale & research module** | CUDA image, multi-GPU/distributed collection seams exercised, ablation harness, model registry maturity; TensorDict decision revisited | 6 |
 | 8 | **Research memory & reporting** | Typed schemas for papers/notes/hypotheses/experiment plans/conclusions, linked by ID to runs and checkpoints; paper index with search; report generator that pulls metrics, statistics, and citations from the run registry | 7 |
 | 9 | **Research intelligence workflows** | LLM-assisted literature synthesis, concept explanation, methodology critique, experiment-design support, and results analysis — operating over the M8 artifacts and the execution layer's data, under the evidence discipline of ARCHITECTURE §1.1 | 8 |
@@ -53,9 +55,9 @@ Notes:
   logging, a plain run directory), because a training script needs them.
   M4 is where experiment infrastructure becomes *complete* — trackers, the
   full checkpoint contract, rliable evaluation — not where it begins.
-- **M2 verification uses plain scripts** for multi-seed stats (calling
-  rliable directly from `benchmarks/`); the reusable evaluation engine is
-  extracted at M4 once its requirements are known from real use.
+- **M2 verification uses plain scripts** for multi-seed stats in
+  `benchmarks/`; reusable aggregate-evaluation tooling is deferred to M6
+  (see the rliable note below).
 - **Research mode applies from M1 onward:** every algorithm ships with its
   mathematical derivation, known weaknesses, comparison to alternatives, and
   an implementation-detail review against the literature (e.g. the PPO
@@ -138,9 +140,19 @@ entry point (M1), JSONL/run-directory machinery (M1), tracker integration
   truncation bootstrapping covered; then CartPole-v1 / Acrobot-v1 /
   LunarLander-v2 runs across ≥5 seeds compared against SB3 under identical
   eval protocols (rliable CIs).
-- **M4 checkpoint gate:** the resume-equals-continuous test from
-  ARCHITECTURE §6.9 — 2N continuous vs. N + restore-in-fresh-process + N,
-  identical CPU weights.
+- **M4B checkpoint gate:** the resume-equals-continuous test from
+  ARCHITECTURE §6.9 — 2N continuous vs. N + save + restore-in-fresh-process
+  + N, identical CPU weights, scoped to the state REINFORCE and PPO
+  actually have (no replay buffers, target networks, or SAC temperature
+  until the algorithms that own them exist).
+- **rliable deferral:** aggregate-metrics tooling waits for M6, when
+  multiple algorithms and environments make aggregate statistics
+  meaningful; because rliable's upstream repository is archived, any use
+  goes behind a small, tested adapter with a pinned dependency.
+- **Action sampling stays un-unified through M4** (audit entry 3): the
+  REINFORCE and PPO sampling paths are preserved verbatim unless a genuine
+  consumer requires a shared implementation *and* a full revalidation is
+  scheduled.
 - **M6 reproduction targets (proposal):** PPO on MuJoCo locomotion vs.
   published reference results; DQN on a 3–5 game Atari subset vs. published
   scores. Full-suite Atari is out of scope until compute is budgeted.

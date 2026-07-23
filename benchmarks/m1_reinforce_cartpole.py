@@ -156,7 +156,8 @@ def write_report(records: list[dict[str, Any]], config: ReinforceConfig, out_dir
         "",
         "Small-sample caveat: these are per-seed point estimates over "
         f"{len(records)} seeds; the rliable aggregate-metrics protocol "
-        "(IQM, bootstrap CIs) arrives with the M4 evaluation engine.",
+        "(IQM, bootstrap CIs) is deferred to the benchmark milestone (M6), "
+        "behind a pinned, tested adapter (rliable upstream is archived).",
         "",
         "Reproducibility scope: these numbers are expected to reproduce only "
         "under the pinned software versions recorded above, on CPU, on "
