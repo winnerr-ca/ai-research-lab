@@ -1,0 +1,240 @@
+{
+  "configs": {
+    "auto": {
+      "env_id": "Pendulum-v1",
+      "seed": 0,
+      "total_steps": 40000,
+      "buffer_capacity": 50000,
+      "warmup_steps": 1000,
+      "batch_size": 256,
+      "gamma": 0.99,
+      "tau": 0.005,
+      "lr": 0.0003,
+      "train_freq": 1,
+      "auto_alpha": true,
+      "fixed_alpha": 0.2,
+      "target_entropy": NaN,
+      "hidden_sizes": [
+        256,
+        256
+      ],
+      "log_every": 500,
+      "eval_every": 2000,
+      "eval_episodes": 10,
+      "stop_return": -180.0,
+      "checkpoint_every": 0
+    },
+    "fixed_alpha": {
+      "env_id": "Pendulum-v1",
+      "seed": 0,
+      "total_steps": 40000,
+      "buffer_capacity": 50000,
+      "warmup_steps": 1000,
+      "batch_size": 256,
+      "gamma": 0.99,
+      "tau": 0.005,
+      "lr": 0.0003,
+      "train_freq": 1,
+      "auto_alpha": false,
+      "fixed_alpha": 0.2,
+      "target_entropy": NaN,
+      "hidden_sizes": [
+        256,
+        256
+      ],
+      "log_every": 500,
+      "eval_every": 2000,
+      "eval_episodes": 10,
+      "stop_return": -180.0,
+      "checkpoint_every": 0
+    }
+  },
+  "environment": {
+    "rlcore": "0.0.1",
+    "python": "3.11.15",
+    "torch": "2.13.0+cu130",
+    "gymnasium": "1.3.0",
+    "numpy": "2.4.6",
+    "hydra": "1.3.4",
+    "platform": "Linux-6.18.5-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "device": "cpu",
+    "cuda_available": "False",
+    "commit": "1bdd52a4e29e26025b510cb7388f598cc94566eb",
+    "git_dirty": "False"
+  },
+  "runs": {
+    "pendulum_auto": [
+      {
+        "seed": 0,
+        "auto_alpha": true,
+        "stopped_early": true,
+        "total_env_steps": 6000,
+        "wall_time_s": 81.3,
+        "deterministic_return_mean": -146.07195491004842,
+        "deterministic_return_std": 45.391206916972415,
+        "deterministic_returns": [
+          -123.20043296370001,
+          -227.61456982032465,
+          -122.35473194644324,
+          -127.1372565047773,
+          -122.58401164013189,
+          -245.2266107168966,
+          -126.00438115211166,
+          -119.37247982434236,
+          -124.73792764345204,
+          -122.48714688830455
+        ],
+        "stochastic_return_mean": -135.4736203323352,
+        "stochastic_return_std": 66.09091427440332,
+        "final_alpha": 0.2969593395590782
+      },
+      {
+        "seed": 1,
+        "auto_alpha": true,
+        "stopped_early": true,
+        "total_env_steps": 8000,
+        "wall_time_s": 110.0,
+        "deterministic_return_mean": -129.74179062838294,
+        "deterministic_return_std": 92.60434853730243,
+        "deterministic_returns": [
+          -118.36710262109753,
+          -236.50438611247478,
+          -1.586350050557622,
+          -118.15333741996854,
+          -118.4370751549021,
+          -331.94205740815215,
+          -1.1386206421401104,
+          -126.30291462806605,
+          -121.63441135008904,
+          -123.3516508963817
+        ],
+        "stochastic_return_mean": -163.4581992118379,
+        "stochastic_return_std": 82.57983892226277,
+        "final_alpha": 0.17812946984171868
+      },
+      {
+        "seed": 2,
+        "auto_alpha": true,
+        "stopped_early": true,
+        "total_env_steps": 6000,
+        "wall_time_s": 76.8,
+        "deterministic_return_mean": -205.73570944090957,
+        "deterministic_return_std": 104.61255010243151,
+        "deterministic_returns": [
+          -314.052281506342,
+          -0.15895273185230666,
+          -120.29893060903369,
+          -241.80954363507306,
+          -227.13056938867388,
+          -118.17536673170213,
+          -127.51042866220494,
+          -327.3719639876203,
+          -248.8355262981641,
+          -332.0135308584294
+        ],
+        "stochastic_return_mean": -189.6901128650456,
+        "stochastic_return_std": 92.50779316886381,
+        "final_alpha": 0.2924513010978699
+      },
+      {
+        "seed": 3,
+        "auto_alpha": true,
+        "stopped_early": true,
+        "total_env_steps": 6000,
+        "wall_time_s": 70.5,
+        "deterministic_return_mean": -156.51062427071128,
+        "deterministic_return_std": 107.33012737874564,
+        "deterministic_returns": [
+          -243.49314676349363,
+          -121.00392691484276,
+          -245.940529101832,
+          -123.06163831316391,
+          -0.7655275619310342,
+          -115.28965417735172,
+          -350.77333326593356,
+          -244.98223251231346,
+          -119.33488663723092,
+          -0.46136745901976894
+        ],
+        "stochastic_return_mean": -178.35290030590505,
+        "stochastic_return_std": 107.32389194010676,
+        "final_alpha": 0.2884545511603355
+      },
+      {
+        "seed": 4,
+        "auto_alpha": true,
+        "stopped_early": true,
+        "total_env_steps": 6000,
+        "wall_time_s": 66.6,
+        "deterministic_return_mean": -155.71224748731572,
+        "deterministic_return_std": 92.07854655029422,
+        "deterministic_returns": [
+          -1.6527291364759338,
+          -125.1550523009025,
+          -119.16680912733983,
+          -118.28696490513252,
+          -222.76735876107702,
+          -362.9506604296697,
+          -122.07706997948925,
+          -121.99302195293922,
+          -125.26005067948753,
+          -237.81275760064364
+        ],
+        "stochastic_return_mean": -163.59900450749018,
+        "stochastic_return_std": 64.63100430092325,
+        "final_alpha": 0.29469490975141527
+      }
+    ],
+    "pendulum_fixed_alpha": [
+      {
+        "seed": 0,
+        "auto_alpha": false,
+        "stopped_early": true,
+        "total_env_steps": 4000,
+        "wall_time_s": 36.6,
+        "deterministic_return_mean": -136.0444491388372,
+        "deterministic_return_std": 99.71582194545549,
+        "deterministic_returns": [
+          -128.97772165355738,
+          -131.5673817934979,
+          -128.5336352027762,
+          -119.25667974519138,
+          -118.3151366991239,
+          -0.13178968626247928,
+          -123.77123388572556,
+          -355.0159323600924,
+          -253.909514528736,
+          -0.9654658334086034
+        ],
+        "stochastic_return_mean": -205.5119116816089,
+        "stochastic_return_std": 103.6498934501098,
+        "final_alpha": 0.19999998807907104
+      },
+      {
+        "seed": 1,
+        "auto_alpha": false,
+        "stopped_early": true,
+        "total_env_steps": 8000,
+        "wall_time_s": 103.0,
+        "deterministic_return_mean": -129.13748186680291,
+        "deterministic_return_std": 90.9550879920366,
+        "deterministic_returns": [
+          -118.40912191816903,
+          -236.14831780503513,
+          -1.577772509385647,
+          -118.35803170462582,
+          -118.52128921869763,
+          -324.55381249322403,
+          -1.1284213618386745,
+          -127.03049533916675,
+          -121.5090330490554,
+          -124.13852326883077
+        ],
+        "stochastic_return_mean": -170.5137343055225,
+        "stochastic_return_std": 97.77874093043165,
+        "final_alpha": 0.19999998807907104
+      }
+    ]
+  }
+}
