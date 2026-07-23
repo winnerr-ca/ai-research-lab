@@ -23,6 +23,7 @@ dependencies = [
 [project.scripts]
 rlcore-train = "rlcore.cli:train_main"
 rlcore-evaluate = "rlcore.cli:evaluate_main"
+rlcore-benchmark = "rlcore.cli:benchmark_main"
 
 [project.optional-dependencies]
 dev = [

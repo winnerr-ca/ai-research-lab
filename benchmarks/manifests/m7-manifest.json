@@ -1,0 +1,17 @@
+{
+  "name": "m7-classic-control",
+  "runs": [
+    {"algo": "reinforce", "env_id": "CartPole-v1", "seed": 0, "overrides": {"updates": 50}, "timeout_s": 900},
+    {"algo": "reinforce", "env_id": "CartPole-v1", "seed": 1, "overrides": {"updates": 50}, "timeout_s": 900},
+    {"algo": "reinforce", "env_id": "CartPole-v1", "seed": 2, "overrides": {"updates": 50}, "timeout_s": 900},
+    {"algo": "ppo", "env_id": "CartPole-v1", "seed": 0, "overrides": {"total_updates": 15}, "timeout_s": 900},
+    {"algo": "ppo", "env_id": "CartPole-v1", "seed": 1, "overrides": {"total_updates": 15}, "timeout_s": 900},
+    {"algo": "ppo", "env_id": "CartPole-v1", "seed": 2, "overrides": {"total_updates": 15}, "timeout_s": 900},
+    {"algo": "dqn", "env_id": "CartPole-v1", "seed": 0, "overrides": {"total_steps": 30000}, "timeout_s": 900},
+    {"algo": "dqn", "env_id": "CartPole-v1", "seed": 1, "overrides": {"total_steps": 30000}, "timeout_s": 900},
+    {"algo": "dqn", "env_id": "CartPole-v1", "seed": 2, "overrides": {"total_steps": 30000}, "timeout_s": 900},
+    {"algo": "sac", "env_id": "Pendulum-v1", "seed": 0, "overrides": {"total_steps": 15000}, "timeout_s": 1200},
+    {"algo": "sac", "env_id": "Pendulum-v1", "seed": 1, "overrides": {"total_steps": 15000}, "timeout_s": 1200},
+    {"algo": "sac", "env_id": "Pendulum-v1", "seed": 2, "overrides": {"total_steps": 15000}, "timeout_s": 1200}
+  ]
+}

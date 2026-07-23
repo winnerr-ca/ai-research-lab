@@ -234,6 +234,33 @@ def evaluate_run(
     return stats
 
 
+def benchmark_main() -> None:
+    """Argparse entry point for ``rlcore-benchmark``."""
+    from rlcore.benchmark import load_manifest, run_benchmark
+    from rlcore.benchreport import write_report
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    parser = argparse.ArgumentParser(
+        description="Run a manifest-driven benchmark and write its report."
+    )
+    parser.add_argument("manifest", type=Path, help="benchmark manifest JSON")
+    parser.add_argument("--out-dir", type=Path, default=None, help="default: benchmarks/<name>")
+    parser.add_argument(
+        "--force", action="store_true", help="re-execute runs that already have results"
+    )
+    parser.add_argument(
+        "--report-only", action="store_true", help="skip execution; aggregate and report only"
+    )
+    args = parser.parse_args()
+
+    manifest = load_manifest(args.manifest)
+    out_dir = args.out_dir if args.out_dir is not None else Path("benchmarks") / manifest.name
+    if not args.report_only:
+        run_benchmark(manifest, out_dir, force=args.force)
+    report = write_report(out_dir, manifest.name)
+    logger.info("report: %s", report)
+
+
 def evaluate_main() -> None:
     """Argparse entry point for ``rlcore-evaluate``."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
