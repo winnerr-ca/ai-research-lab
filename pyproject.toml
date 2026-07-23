@@ -35,6 +35,12 @@ dev = [
 parity = [
     "stable-baselines3>=2.4",
 ]
+# Optional tracker backends (ARCHITECTURE §6.7): local tracking never needs
+# these, and no credentials are required even with them installed.
+track = [
+    "wandb>=0.17",
+    "mlflow>=2.14",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/rlcore"]

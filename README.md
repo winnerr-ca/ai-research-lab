@@ -45,6 +45,11 @@ rlcore-evaluate outputs/<date>/<time>/ --episodes 50
 # Checkpoint every 10 updates; resume later with a larger budget
 rlcore-train algo=ppo algo.checkpoint_every=10
 rlcore-train algo=ppo algo.total_updates=150 resume_from=<run_dir>/checkpoint.pt
+
+# Optional tracker mirrors (local run dir stays the source of record;
+# W&B runs offline and MLflow uses a local SQLite store — no credentials)
+rlcore-train algo=ppo track=wandb
+rlcore-train algo=ppo track=mlflow
 ```
 
 Every run writes a self-describing local run directory (identity, resolved

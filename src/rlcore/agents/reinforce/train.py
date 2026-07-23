@@ -42,6 +42,7 @@ from rlcore.reporting import write_summary
 from rlcore.utils.seeding import Rng, restore_rng, rng_state, seed_everything
 
 if TYPE_CHECKING:
+    from rlcore.tracking import Tracker
     from rlcore.types import Batch
 
 logger = logging.getLogger(__name__)
@@ -210,6 +211,7 @@ def train(
     config: ReinforceConfig,
     out_dir: Path | None = None,
     resume_from: Path | None = None,
+    tracker: Tracker | None = None,
 ) -> TrainResult:
     """Train REINFORCE per ``config`` and return the result.
 
@@ -223,6 +225,8 @@ def train(
         out_dir: If given, writes the standard run directory there.
         resume_from: Optional ``checkpoint.pt`` to resume from; the config
             must match the checkpoint's except the ``updates`` budget.
+        tracker: Optional metrics mirror (see :mod:`rlcore.tracking`); the
+            local run directory stays the source of record either way.
 
     Returns:
         The :class:`TrainResult`, including the final greedy evaluation.
@@ -267,6 +271,14 @@ def train(
         start_update = 1
 
     env = envs.train_env
+    if tracker is not None:
+        tracker.start(
+            run_id=run_id,
+            algo="reinforce",
+            env_id=config.env_id,
+            seed=config.seed,
+            config=asdict(config),
+        )
     stopped_early = False
 
     for update in range(start_update, config.updates + 1):
@@ -308,6 +320,8 @@ def train(
             )
             if config.stop_return is not None and stats.mean_return >= config.stop_return:
                 history.append(entry)
+                if tracker is not None:
+                    tracker.log_metrics(update, entry)
                 stopped_early = True
                 logger.info("stop_return %.1f reached at update %d.", config.stop_return, update)
                 break
@@ -320,6 +334,8 @@ def train(
                 metrics["entropy"],
             )
         history.append(entry)
+        if tracker is not None:
+            tracker.log_metrics(update, entry)
         if config.checkpoint_every > 0 and update % config.checkpoint_every == 0:
             assert out_dir is not None  # validated above
             save_checkpoint(
@@ -355,6 +371,17 @@ def train(
         wall_time_s=time.perf_counter() - start,
     )
     envs.close()
+    if tracker is not None:
+        tracker.log_summary(
+            {
+                "eval_return_mean": final_eval.mean_return,
+                "eval_return_std": final_eval.std_return,
+                "total_env_steps": total_env_steps,
+                "stopped_early": stopped_early,
+                "wall_time_s": result.wall_time_s,
+            }
+        )
+        tracker.finish()
 
     if out_dir is not None:
         write_run_record(

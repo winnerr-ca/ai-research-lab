@@ -41,6 +41,7 @@ from rlcore.agents.reinforce.train import train as reinforce_train
 from rlcore.envs import make_discrete_env_pair
 from rlcore.evaluation import EvalStats, evaluate_policy
 from rlcore.experiments import load_final_model
+from rlcore.tracking import Tracker, make_tracker
 from rlcore.utils.seeding import seed_everything
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,8 @@ class TrainRunConfig:
     defaults: list[Any] = field(default_factory=lambda: [{"algo": MISSING}, "_self_"])
     algo: Any = MISSING
     resume_from: str | None = None
+    track: str = "none"
+    track_project: str = "rlcore"
 
 
 _cs = ConfigStore.instance()
@@ -62,14 +65,19 @@ _cs.store(group="algo", name="ppo", node=PpoConfig)
 
 
 def dispatch_train(
-    algo_config: object, out_dir: Path | None, resume_from: Path | None = None
+    algo_config: object,
+    out_dir: Path | None,
+    resume_from: Path | None = None,
+    tracker: Tracker | None = None,
 ) -> None:
     """Route a resolved algorithm config to its trainer."""
     result: ReinforceTrainResult | PpoTrainResult
     if isinstance(algo_config, ReinforceConfig):
-        result = reinforce_train(algo_config, out_dir=out_dir, resume_from=resume_from)
+        result = reinforce_train(
+            algo_config, out_dir=out_dir, resume_from=resume_from, tracker=tracker
+        )
     elif isinstance(algo_config, PpoConfig):
-        result = ppo_train(algo_config, out_dir=out_dir, resume_from=resume_from)
+        result = ppo_train(algo_config, out_dir=out_dir, resume_from=resume_from, tracker=tracker)
     else:
         raise ValueError(
             f"Unknown algorithm config type {type(algo_config).__name__}; "
@@ -92,7 +100,8 @@ def train_main(cfg: TrainRunConfig) -> None:
     resolved = cast("TrainRunConfig", OmegaConf.to_object(cast("Any", cfg)))
     out_dir = Path(HydraConfig.get().runtime.output_dir)
     resume = Path(resolved.resume_from) if resolved.resume_from else None
-    dispatch_train(resolved.algo, out_dir, resume_from=resume)
+    tracker = make_tracker(resolved.track, project=resolved.track_project)
+    dispatch_train(resolved.algo, out_dir, resume_from=resume, tracker=tracker)
 
 
 def evaluate_run(
