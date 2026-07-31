@@ -5,6 +5,22 @@ format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Lab dashboard** (`rlcore-lab`): a localhost, dependency-free web
+  interface for testing research on the platform — run browsing over
+  standard run directories, learning-curve overlays from
+  `metrics.jsonl`, grouped comparisons via `rlcore.stats` (fixed
+  bootstrap seed; small-sample/unequal-budget/repeated-seed caveats
+  stated; excluded runs listed with reasons), subprocess-isolated run
+  launching with request validation and stderr capture, automatic
+  discovery of algorithm packages under `rlcore.agents` (user-added
+  variants included), and a read-only research-store listing. Gated
+  research actions remain unreachable over HTTP. Documented in
+  `docs/lab.md`.
+
 ## [1.0.0] - 2026-07-23
 
 First stable release. Everything below was built and validated across

@@ -25,6 +25,7 @@ rlcore-train = "rlcore.cli:train_main"
 rlcore-evaluate = "rlcore.cli:evaluate_main"
 rlcore-benchmark = "rlcore.cli:benchmark_main"
 rlcore-research = "rlcore.research.cli:research_main"
+rlcore-lab = "rlcore.lab.server:lab_main"
 
 [project.optional-dependencies]
 dev = [
