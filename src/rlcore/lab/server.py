@@ -163,8 +163,9 @@ class _LabHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "internal error; see server log"}, status=500)
 
     def do_POST(self) -> None:
-        """Handle ``/api/launch``: validate, then start a training subprocess."""
-        if urlparse(self.path).path != "/api/launch":
+        """Handle ``/api/launch`` (start a training subprocess) and ``/api/stop``."""
+        path = urlparse(self.path).path
+        if path not in ("/api/launch", "/api/stop"):
             self._send_json({"error": f"unknown path {self.path!r}"}, status=404)
             return
         try:
@@ -174,6 +175,12 @@ class _LabHandler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length))
             if not isinstance(payload, dict):
                 raise ValueError("request body must be a JSON object.")
+            if path == "/api/stop":
+                try:
+                    self._send_json(self._ctx.jobs.stop(str(payload.get("job_id", ""))))
+                except KeyError:
+                    self._send_json({"error": "unknown job id."}, status=400)
+                return
             algo = str(payload.get("algo", ""))
             overrides = payload.get("overrides", {})
             if not isinstance(overrides, dict):

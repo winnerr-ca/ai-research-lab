@@ -94,6 +94,19 @@ class TestJobManager:
         assert final["status"] == "failed"
         assert "NoSuchEnv" in final["error"]
 
+    def test_stop_terminates_running_job(self, tmp_path: Path) -> None:
+        manager = JobManager(tmp_path)
+        algos = discover_algos()
+        # A budget far beyond the test's lifetime, so stop() is what ends it.
+        overrides = {"updates": 100_000, "episodes_per_update": 10}
+        job = manager.launch(validate_launch(algos, "reinforce", overrides), overrides)
+        stopped = manager.stop(job["job_id"])
+        assert stopped["status"] in ("running", "stopped")  # terminate may need a beat
+        final = manager.wait(job["job_id"], timeout_s=30.0)
+        assert final["status"] == "stopped"
+
     def test_wait_unknown_job_raises(self, tmp_path: Path) -> None:
         with pytest.raises(KeyError):
             JobManager(tmp_path).wait("ghost", timeout_s=1.0)
+        with pytest.raises(KeyError):
+            JobManager(tmp_path).stop("ghost")

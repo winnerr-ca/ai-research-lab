@@ -132,6 +132,18 @@ class TestValidationResponses:
         assert excinfo.value.code == 400
         assert "unknown algorithm" in json.loads(excinfo.value.read())["error"]
 
+    def test_stop_rejects_unknown_job(self, server: str) -> None:
+        request = urllib.request.Request(
+            server + "/api/stop",
+            data=json.dumps({"job_id": "ghost"}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as excinfo:
+            urllib.request.urlopen(request)
+        assert excinfo.value.code == 400
+        assert "unknown job id" in json.loads(excinfo.value.read())["error"]
+
     def test_launch_rejects_bad_body(self, server: str) -> None:
         request = urllib.request.Request(server + "/api/launch", data=b"[1, 2]", method="POST")
         with pytest.raises(urllib.error.HTTPError) as excinfo:

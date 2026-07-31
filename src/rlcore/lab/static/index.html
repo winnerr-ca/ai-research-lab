@@ -54,7 +54,8 @@
   .caveat { color: var(--warn); font-size: 12.5px; margin: 4px 0; }
   .error { color: var(--bad); font-size: 12.5px; white-space: pre-wrap; }
   .status-ok { color: var(--ok); } .status-failed { color: var(--bad); }
-  .status-running { color: var(--accent); }
+  .status-running { color: var(--accent); } .status-stopped { color: var(--warn); }
+  button.mini { padding: 1px 8px; font-size: 11px; margin-left: 6px; }
   svg { width: 100%; height: 260px; display: block; }
   .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px;
             margin-top: 6px; }
@@ -341,6 +342,12 @@ function renderStory() {
       `${esc(ALGO_INFO[j.algo] || "")} It will appear in the Runs table the ` +
       `moment it finishes.</p>`);
   }
+  if (running.length > 2) {
+    parts.push(`<p class="caveat">⚠ ${running.length} jobs are training at once —
+      they share this machine's few CPU cores, so each runs about
+      ${running.length}× slower than it would alone. Use the <b>Stop</b> buttons
+      in the Jobs panel and run 1-2 at a time.</p>`);
+  }
   for (const j of failed.slice(0, 2)) {
     parts.push(`<p>❌ Job ${esc(j.job_id)} (${esc(j.algo)}) failed — its error is ` +
       `shown under the Jobs panel. Failures are recorded, never hidden.</p>`);
@@ -510,6 +517,18 @@ function renderFields() {
       placeholder="${esc(JSON.stringify(f.default))}${f.required ? " (required)" : ""}">
   </label>`).join("");
 }
+async function stopJob(id) {
+  try {
+    await api("/api/stop", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job_id: id }),
+    });
+  } catch (err) {
+    $("job-errors").innerHTML = `<p class="error">${esc(err.message)}</p>`;
+  }
+  loadJobs();
+}
+
 async function launch() {
   const overrides = {};
   for (const input of document.querySelectorAll("#fields input")) {
@@ -519,6 +538,27 @@ async function launch() {
     catch { overrides[input.dataset.field] = raw; }
   }
   const msg = $("launch-msg");
+  // Sanity checks before starting a real training process: huge typed
+  // budgets and an already-busy machine are the two easy foot-guns.
+  const spec = algoSpecs.find((a) => a.name === $("algo").value);
+  const oversized = (spec ? spec.fields : []).filter((f) =>
+    typeof f.default === "number" && f.default >= 100 &&
+    typeof overrides[f.name] === "number" && overrides[f.name] > 3 * f.default);
+  if (oversized.length) {
+    const detail = oversized.map((f) =>
+      `${f.name}=${overrides[f.name]} (default ${f.default})`).join(", ");
+    if (!confirm(`Heads up: ${detail} — much bigger than the default, so this ` +
+      `run could take a very long time on this machine. Launch anyway?`)) {
+      msg.innerHTML = `<p class="dimtext">launch cancelled.</p>`;
+      return;
+    }
+  }
+  const busy = lastJobs.filter((j) => j.status === "running").length;
+  if (busy >= 2 && !confirm(`${busy} jobs are already training and they share ` +
+    `this machine's CPU — each extra job slows all of them down. Launch anyway?`)) {
+    msg.innerHTML = `<p class="dimtext">launch cancelled.</p>`;
+    return;
+  }
   try {
     const job = await api("/api/launch", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -538,7 +578,8 @@ async function loadJobs() {
   if (sig !== jobsSig) { jobsSig = sig; loadRuns(); } else { renderStory(); }
   $("jobs").querySelector("tbody").innerHTML = jobs.map((j) => `<tr>
     <td>${esc(j.job_id)}</td><td>${esc(j.algo)}</td>
-    <td class="status-${esc(j.status)}">${esc(j.status)}</td>
+    <td class="status-${esc(j.status)}">${esc(j.status)}${j.status === "running"
+      ? `<button class="mini" onclick="stopJob('${esc(j.job_id)}')">Stop</button>` : ""}</td>
     <td class="num">${fmt(j.wall_time_s)}</td>
     <td title="${esc(j.run_dir)}">${esc(j.run_dir.split("/").slice(-1)[0])}</td></tr>`)
     .join("") || `<tr><td colspan="5" class="dimtext">nothing launched yet</td></tr>`;

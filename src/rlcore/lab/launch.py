@@ -204,6 +204,7 @@ class JobManager:
         """Create a manager writing run directories under ``out_root``."""
         self._out_root = out_root
         self._jobs: dict[str, _Job] = {}
+        self._stopped: set[str] = set()
         self._lock = threading.Lock()
 
     def launch(self, spec: AlgoSpec, overrides: dict[str, Any]) -> dict[str, Any]:
@@ -264,6 +265,8 @@ class JobManager:
             snapshot["status"] = "running"
         elif returncode == 0:
             snapshot["status"] = "ok"
+        elif job.job_id in self._stopped:
+            snapshot["status"] = "stopped"
         else:
             snapshot["status"] = "failed"
             snapshot["returncode"] = returncode
@@ -277,6 +280,29 @@ class JobManager:
         with self._lock:
             jobs = list(self._jobs.values())
         return [self._snapshot(job) for job in reversed(jobs)]
+
+    def stop(self, job_id: str) -> dict[str, Any]:
+        """Terminate a running job (SIGTERM, then SIGKILL); return its snapshot.
+
+        Stopping is recorded as status ``stopped`` — distinct from
+        ``failed`` — and the partial run directory is left in place, so
+        even an aborted run remains an honest artifact.
+
+        Raises:
+            KeyError: For unknown job ids.
+        """
+        with self._lock:
+            job = self._jobs[job_id]
+            self._stopped.add(job_id)
+        if job.process.poll() is None:
+            job.process.terminate()
+            try:
+                job.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                job.process.kill()
+                job.process.wait(timeout=5)
+            logger.info("stopped job %s (%s)", job_id, job.algo)
+        return self._snapshot(job)
 
     def wait(self, job_id: str, timeout_s: float) -> dict[str, Any]:
         """Block until a job exits (or ``timeout_s`` elapses); return its snapshot.
