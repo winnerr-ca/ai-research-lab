@@ -24,6 +24,7 @@ from urllib.parse import parse_qs, urlparse
 
 from rlcore.lab.data import compare_runs, discover_runs, load_metrics, resolve_run_dir
 from rlcore.lab.launch import JobManager, algo_fields, discover_algos, validate_launch
+from rlcore.lab.replay import record_trajectory
 from rlcore.research.store import ResearchStore
 
 logger = logging.getLogger(__name__)
@@ -139,6 +140,13 @@ class _LabHandler(BaseHTTPRequestHandler):
                 rel = query.get("dir", [""])[0]
                 run_dir = resolve_run_dir(self._ctx.runs_root, rel)
                 self._send_json(load_metrics(run_dir))
+            elif url.path == "/api/replay":
+                rel = query.get("dir", [""])[0]
+                run_dir = resolve_run_dir(self._ctx.runs_root, rel)
+                try:
+                    self._send_json(record_trajectory(run_dir))
+                except FileNotFoundError as error:
+                    self._send_json({"error": f"run has no final model yet: {error}"}, status=400)
             elif url.path == "/api/compare":
                 rels = [rel for rel in query.get("dirs", [""])[0].split("|") if rel]
                 self._send_json(compare_runs(self._ctx.runs_root, rels))

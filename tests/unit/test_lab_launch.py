@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from rlcore.lab.launch import JobManager, algo_fields, discover_algos, validate_launch
+from rlcore.lab.replay import record_trajectory
 
 TINY_REINFORCE = {
     "updates": 2,
@@ -72,6 +73,17 @@ class TestJobManager:
         launch_record = json.loads((run_dir / "lab-launch.json").read_text())
         assert launch_record == {"algo": "reinforce", "overrides": overrides}
         assert manager.jobs()[0]["job_id"] == job["job_id"]
+
+        # The finished run replays for the agent view: CartPole states are
+        # 4-vectors, rewards accumulate to the episode return, and the
+        # payload is strict-JSON clean (browsers reject NaN).
+        trajectory = record_trajectory(run_dir)
+        assert trajectory["env_id"] == "CartPole-v1"
+        assert trajectory["steps"] >= 1
+        assert len(trajectory["states"]) == trajectory["steps"] + 1
+        assert all(len(state) == 4 for state in trajectory["states"])
+        assert sum(trajectory["rewards"]) == trajectory["episode_return"]
+        json.dumps(trajectory, allow_nan=False)
 
     def test_failed_launch_records_stderr(self, tmp_path: Path) -> None:
         manager = JobManager(tmp_path)

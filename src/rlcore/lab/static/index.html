@@ -97,6 +97,16 @@
     <div class="legend" id="legend"></div>
   </section>
   <section>
+    <h2>Agent view</h2>
+    <div class="row">
+      <button class="primary" onclick="watchSelected()">Watch selected agent</button>
+      <button onclick="replayAgain()">Replay</button>
+      <span class="dimtext" id="agent-hud">Tick one run above, then watch the trained
+        agent act. Greedy policy, fresh evaluation episode.</span>
+    </div>
+    <svg id="agent" viewBox="0 0 720 300" style="height:300px"></svg>
+  </section>
+  <section>
     <h2>Comparison</h2>
     <div id="compare" class="dimtext">Select runs above and press “Compare selected”.
       Groups are (algorithm, environment); scores are recorded final evaluation
@@ -288,6 +298,64 @@ async function loadJobs() {
     .join("") || `<tr><td colspan="5" class="dimtext">nothing launched yet</td></tr>`;
   $("job-errors").innerHTML = jobs.filter((j) => j.error)
     .map((j) => `<p class="error">${esc(j.job_id)}: ${esc(j.error.slice(-400))}</p>`).join("");
+}
+
+let traj = null, agentTimer = null;
+async function watchSelected() {
+  const sel = selected();
+  const hud = $("agent-hud");
+  if (!sel.length) { hud.textContent = "Tick a run in the table first."; return; }
+  hud.textContent = "loading replay… (runs one fresh evaluation episode)";
+  try { traj = await api("/api/replay?dir=" + encodeURIComponent(sel[0].dir)); }
+  catch (err) { hud.textContent = "replay failed: " + err.message; return; }
+  playTraj();
+}
+function replayAgain() { if (traj) playTraj(); }
+function playTraj() {
+  if (agentTimer) clearInterval(agentTimer);
+  const svg = $("agent"), hud = $("agent-hud");
+  let i = 0, total = 0;
+  agentTimer = setInterval(() => {
+    if (i >= traj.states.length) { clearInterval(agentTimer); agentTimer = null; return; }
+    svg.innerHTML = drawState(traj.env_id, traj.states[i]);
+    if (i > 0) total += traj.rewards[i - 1] ?? 0;
+    hud.textContent = `${traj.algo} on ${traj.env_id} — step ${i}/${traj.steps}` +
+      ` · reward so far ${total.toFixed(1)} · episode return ${traj.episode_return.toFixed(1)}`;
+    i++;
+  }, 25);
+}
+function drawState(env, s) {
+  const line = (x1, y1, x2, y2, c, w) => `<line x1="${x1}" y1="${y1}" x2="${x2}" ` +
+    `y2="${y2}" stroke="${c}" stroke-width="${w}" stroke-linecap="round"/>`;
+  const circ = (x, y, r, c) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${c}"/>`;
+  if (env === "CartPole-v1") {
+    const cx = 360 + (s[0] / 2.4) * 300, cy = 220;
+    const tipX = cx + 110 * Math.sin(s[2]), tipY = cy - 110 * Math.cos(s[2]);
+    return line(40, 235, 680, 235, "#2c323c", 3)
+      + `<rect x="${cx - 35}" y="${cy - 15}" width="70" height="30" rx="4" fill="#6fb3ff"/>`
+      + line(cx, cy, tipX, tipY, "#e0b467", 7) + circ(tipX, tipY, 7, "#e6816f");
+  }
+  if (env === "Pendulum-v1") {
+    const px = 360, py = 160, tipX = px + 110 * s[1], tipY = py - 110 * s[0];
+    return line(px - 200, py, px + 200, py, "#2c323c", 1) + circ(px, py, 6, "#8a93a1")
+      + line(px, py, tipX, tipY, "#6fb3ff", 8) + circ(tipX, tipY, 10, "#e0b467");
+  }
+  if (env === "Acrobot-v1") {
+    const px = 360, py = 130, L = 70;
+    const c1 = s[0], s1 = s[1], c2 = s[2], s2 = s[3];
+    const x1 = px + L * s1, y1 = py + L * c1;
+    const s12 = s1 * c2 + c1 * s2, c12 = c1 * c2 - s1 * s2;
+    const x2 = x1 + L * s12, y2 = y1 + L * c12;
+    return line(px - 200, py - L, px + 200, py - L, "#6fce8f", 1)
+      + circ(px, py, 5, "#8a93a1") + line(px, py, x1, y1, "#6fb3ff", 6)
+      + line(x1, y1, x2, y2, "#e0b467", 6) + circ(x2, y2, 7, "#e6816f");
+  }
+  const w = 720 / s.length;
+  return s.map((v, k) => {
+    const h = Math.max(-140, Math.min(140, v * 40));
+    return `<rect x="${k * w + 8}" y="${h > 0 ? 150 - h : 150}" width="${w - 16}" ` +
+      `height="${Math.abs(h) || 1}" fill="#6fb3ff"/>`;
+  }).join("") + line(0, 150, 720, 150, "#2c323c", 1);
 }
 
 async function loadResearch() {
