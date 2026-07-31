@@ -81,7 +81,8 @@
   <span class="sub">local research dashboard — every number traces to a run directory</span>
 </header>
 <section id="story-panel">
-  <h2>What's happening</h2>
+  <h2>Your research journey</h2>
+  <div id="journey"></div>
   <div id="story" class="dimtext">reading the lab state…</div>
 </section>
 <main>
@@ -192,6 +193,20 @@
     <div id="job-errors"></div>
   </section>
   <section>
+    <h2>Research ideas — questions you can answer here</h2>
+    <details class="help"><summary>What is this?</summary>
+      <p>Real, answerable research questions this lab supports out of the box. Each
+      one names something to vary and something to measure. Click <b>Set up in
+      launch form</b> to pre-fill the settings, press Launch, repeat with seeds 0–2
+      (change only the <b>seed</b> field between launches), do the same for the
+      other variant if the idea has one, then tick the runs and
+      <b>Compare selected</b>. That loop — vary one thing, hold everything else
+      fixed, repeat across seeds, compare honestly — is the scientific method,
+      and it's the entire point of this platform.</p>
+    </details>
+    <div id="ideas"></div>
+  </section>
+  <section>
     <h2>Research store</h2>
     <div id="research" class="dimtext">—</div>
   </section>
@@ -249,10 +264,75 @@ const METRIC_INFO = {
     "acting randomly.",
 };
 
+const JOURNEY = [
+  ["1. Ask a question", "what do you want to know?"],
+  ["2. Train with seeds", "same setup, seeds 0, 1, 2"],
+  ["3. Watch & plot", "did it actually learn?"],
+  ["4. Compare fairly", "group stats + caveats"],
+  ["5. Conclude honestly", "claim only what's supported"],
+];
+let compared = false;
+
+function renderJourney(stage) {
+  const w = 132, gap = 15, h = 46;
+  let svg = `<svg viewBox="0 0 ${JOURNEY.length * (w + gap)} 78" style="height:78px;max-width:900px">`;
+  JOURNEY.forEach(([label, sub], k) => {
+    const x = k * (w + gap);
+    const on = k + 1 === stage, done = k + 1 < stage;
+    svg += `<rect x="${x}" y="4" width="${w}" height="${h}" rx="8"
+        fill="${on ? "#234a6e" : "#1c2027"}"
+        stroke="${on ? "#6fb3ff" : done ? "#6fce8f" : "#2c323c"}" stroke-width="1.5"/>
+      <text x="${x + w / 2}" y="23" text-anchor="middle" font-size="11.5"
+        fill="${on ? "#d6dbe3" : done ? "#6fce8f" : "#8a93a1"}">${label}</text>
+      <text x="${x + w / 2}" y="41" text-anchor="middle" font-size="8.2"
+        fill="#8a93a1">${sub.length > 42 ? sub.slice(0, 42) + "…" : sub}</text>`;
+    if (done) svg += `<text x="${x + w - 12}" y="18" font-size="10" fill="#6fce8f">✓</text>`;
+    if (k < JOURNEY.length - 1) {
+      svg += `<text x="${x + w + gap / 2}" y="30" text-anchor="middle"
+        font-size="13" fill="#8a93a1">→</text>`;
+    }
+  });
+  svg += "</svg>";
+  $("journey").innerHTML = svg
+    + `<p class="dimtext">You are at the highlighted step. The goal of everything on
+       this page: turn “I think X helps” into “across N independent runs, X scored
+       [this range] vs [that range]” — a claim someone else could check.</p>`;
+}
+
+function journeyStage(running) {
+  const groups = {};
+  for (const r of runs) {
+    if (typeof r.final_eval_return_mean !== "number") continue;
+    const g = groups[`${r.algo}|${r.env_id}`] ??= new Set();
+    g.add(r.seed);
+  }
+  const maxSeeds = Math.max(0, ...Object.values(groups).map((g) => g.size));
+  if (!runs.length && !running.length) return 1;
+  if (maxSeeds >= 3) return compared ? 5 : 4;
+  if (runs.length) return 3;
+  return 2;
+}
+
 function renderStory() {
   const parts = [];
   const running = lastJobs.filter((j) => j.status === "running");
   const failed = lastJobs.filter((j) => j.status === "failed");
+  renderJourney(journeyStage(running));
+  const seedsByGroup = {};
+  for (const r of runs) {
+    const g = seedsByGroup[`${r.algo}|${r.env_id}`] ??= { n: 0, seeds: new Set() };
+    g.n += 1;
+    g.seeds.add(r.seed);
+  }
+  for (const [key, g] of Object.entries(seedsByGroup)) {
+    if (g.n >= 2 && g.seeds.size === 1) {
+      parts.push(`<p class="caveat">⚠ Your ${g.n} ${esc(key.replace("|", " "))} runs
+        all use seed ${esc([...g.seeds][0])} — with identical settings and the same
+        seed, this platform reproduces the <i>exact same</i> run (that's its
+        reproducibility guarantee, notice the identical scores and steps). For real
+        repeats, change the <b>seed</b> field to 1, then 2, before each launch.</p>`);
+    }
+  }
   for (const j of running) {
     const envId = j.overrides.env_id ||
       (j.algo === "sac" ? "Pendulum-v1" : "CartPole-v1");
@@ -337,6 +417,7 @@ async function compareSelected() {
   try {
     const out = await api("/api/compare?dirs=" +
       encodeURIComponent(sel.map((r) => r.dir).join("|")));
+    compared = true;
     let html = "";
     for (const g of out.groups) {
       const s = g.stats;
@@ -524,6 +605,66 @@ function drawState(env, s) {
   }).join("") + line(0, 150, 720, 150, "#2c323c", 1);
 }
 
+const IDEAS = [
+  { t: "How much does luck (the seed) matter?", algo: "reinforce",
+    o: { updates: 80 },
+    d: "Run this identical setup five times, changing only the seed (0,1,2,3,4), " +
+      "then Compare. The spread between those five scores is pure randomness — " +
+      "knowing its size is the most important lesson in RL research, because any " +
+      "\"improvement\" smaller than it means nothing. (~2 min per run)" },
+  { t: "Does Double DQN actually help?", algo: "dqn",
+    o: { total_steps: 30000, double_q: true },
+    d: "A famous 2015 paper claims plain DQN over-estimates values and a small fix " +
+      "(double_q) helps. Test it: 3 seeds with double_q true, 3 with false, " +
+      "Compare the groups. You're checking a published research claim on your own " +
+      "hardware. (~5-10 min per run)" },
+  { t: "How sensitive is learning to the learning rate?", algo: "reinforce",
+    o: { updates: 80, lr: 0.0005 },
+    d: "The learning rate is how big each learning step is. Try 0.0005, the " +
+      "default 0.005, and 0.05 (2-3 seeds each). Expect: too small = slow, too " +
+      "big = unstable or collapse. Watch the failures in the Agent view too." },
+  { t: "Does return normalization earn its keep?", algo: "reinforce",
+    o: { updates: 80, normalize_returns: false },
+    d: "An ablation: the same runs with normalize_returns false vs true (default). " +
+      "This is a variance-reduction trick the repo's own docs derive and " +
+      "caveat — measure whether it matters here." },
+  { t: "How small can the brain be?", algo: "reinforce",
+    o: { updates: 80, hidden_sizes: [8, 8] },
+    d: "The default network is [64,64] neurons. Does tiny [8,8] still solve " +
+      "CartPole? Does bigger help at all? Cheap to test, surprising answers." },
+  { t: "Short-sighted vs far-sighted agents (gamma)", algo: "dqn",
+    o: { total_steps: 30000, gamma: 0.9 },
+    d: "gamma sets how much future reward matters vs immediate reward. Compare " +
+      "0.9 against the default 0.99. For a survival task like CartPole, " +
+      "which wins?" },
+  { t: "A different body: continuous control", algo: "sac",
+    o: {},
+    d: "SAC on Pendulum-v1 — smooth torque control instead of left/right presses. " +
+      "Scores are negative penalties, so closer to 0 is better (−150 is good). " +
+      "Definitely watch this one in the Agent view. (~10 min per run)" },
+];
+
+function renderIdeas() {
+  $("ideas").innerHTML = IDEAS.map((idea, k) =>
+    `<details class="help"><summary>${esc(idea.t)}</summary>
+      <p>${esc(idea.d)}</p>
+      <p><button onclick="useIdea(${k})">Set up in launch form</button></p>
+    </details>`).join("");
+}
+function useIdea(k) {
+  const idea = IDEAS[k];
+  $("algo").value = idea.algo;
+  renderFields();
+  for (const input of document.querySelectorAll("#fields input")) {
+    const value = idea.o[input.dataset.field];
+    if (value !== undefined) input.value = JSON.stringify(value);
+  }
+  $("launch-msg").innerHTML = `<p class="tip" style="color:var(--ok)">Idea loaded:
+    “${esc(idea.t)}”. Press <b>Launch</b>, then repeat with <b>seed</b> 1 and 2 —
+    change only the seed between repeats.</p>`;
+  $("algo").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
 async function loadResearch() {
   const r = await api("/api/research");
   $("research").innerHTML = !r.present
@@ -533,7 +674,7 @@ async function loadResearch() {
       ).join("") || "store is empty";
 }
 
-loadRuns(); loadAlgos(); loadJobs(); loadResearch();
+loadRuns(); loadAlgos(); loadJobs(); loadResearch(); renderIdeas();
 setInterval(() => { loadJobs(); }, 4000);
 </script>
 </body>
