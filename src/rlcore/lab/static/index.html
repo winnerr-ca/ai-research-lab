@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rlcore lab</title>
+<style>
+  :root {
+    --bg: #14171c; --panel: #1c2027; --line: #2c323c; --text: #d6dbe3;
+    --dim: #8a93a1; --accent: #6fb3ff; --ok: #6fce8f; --bad: #e6816f;
+    --warn: #e0b467;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.45 ui-sans-serif, system-ui, sans-serif;
+  }
+  header {
+    padding: 14px 20px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: baseline; gap: 14px;
+  }
+  header h1 { margin: 0; font-size: 17px; font-weight: 600; }
+  header .sub { color: var(--dim); font-size: 12px; }
+  main {
+    display: grid; grid-template-columns: minmax(430px, 1.2fr) minmax(360px, 1fr);
+    gap: 16px; padding: 16px 20px; align-items: start;
+  }
+  section {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 14px 16px; margin-bottom: 16px;
+  }
+  h2 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase;
+       letter-spacing: .06em; color: var(--dim); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line);
+           white-space: nowrap; }
+  th { color: var(--dim); font-weight: 500; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .scroll { overflow-x: auto; max-height: 330px; overflow-y: auto; }
+  button {
+    background: #262c36; color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 13px;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: #234; border-color: var(--accent); }
+  select, input {
+    background: #12151a; color: var(--text); border: 1px solid var(--line);
+    border-radius: 5px; padding: 4px 8px; font-size: 13px; width: 100%;
+  }
+  .row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px;
+         flex-wrap: wrap; }
+  .fields { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .fields label { font-size: 12px; color: var(--dim); display: block; }
+  .caveat { color: var(--warn); font-size: 12.5px; margin: 4px 0; }
+  .error { color: var(--bad); font-size: 12.5px; white-space: pre-wrap; }
+  .status-ok { color: var(--ok); } .status-failed { color: var(--bad); }
+  .status-running { color: var(--accent); }
+  svg { width: 100%; height: 260px; display: block; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px;
+            margin-top: 6px; }
+  .legend span::before {
+    content: ""; display: inline-block; width: 10px; height: 10px;
+    border-radius: 2px; margin-right: 5px; background: currentColor;
+    vertical-align: -1px;
+  }
+  .dimtext { color: var(--dim); font-size: 12.5px; }
+  @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>rlcore lab</h1>
+  <span class="sub">local research dashboard — every number traces to a run directory</span>
+</header>
+<main>
+<div>
+  <section>
+    <h2>Runs</h2>
+    <div class="row">
+      <button onclick="loadRuns()">Refresh</button>
+      <button class="primary" onclick="compareSelected()">Compare selected</button>
+      <button onclick="plotSelected()">Plot selected</button>
+      <label class="dimtext" style="margin-left:auto">metric
+        <select id="metric-key" style="width:auto" onchange="plotSelected()"></select>
+      </label>
+    </div>
+    <div class="scroll"><table id="runs">
+      <thead><tr><th></th><th>run</th><th>algo</th><th>env</th>
+        <th class="num">seed</th><th class="num">final eval</th>
+        <th class="num">steps</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </section>
+  <section>
+    <h2>Learning curves</h2>
+    <svg id="chart" viewBox="0 0 720 260" preserveAspectRatio="none"></svg>
+    <div class="legend" id="legend"></div>
+  </section>
+  <section>
+    <h2>Comparison</h2>
+    <div id="compare" class="dimtext">Select runs above and press “Compare selected”.
+      Groups are (algorithm, environment); scores are recorded final evaluation
+      returns; intervals are bootstrap CIs from rlcore.stats with a fixed seed.</div>
+  </section>
+</div>
+<div>
+  <section>
+    <h2>Launch a run</h2>
+    <div class="row">
+      <select id="algo" style="width:auto" onchange="renderFields()"></select>
+      <button class="primary" onclick="launch()">Launch</button>
+    </div>
+    <div class="fields" id="fields"></div>
+    <p class="dimtext">Empty fields use the config default shown as placeholder.
+      Values are parsed as JSON (numbers, true/false, lists) or kept as strings.
+      Runs land under the server's launch root with a full standard run directory.</p>
+    <div id="launch-msg"></div>
+  </section>
+  <section>
+    <h2>Jobs (this server session)</h2>
+    <div class="scroll"><table id="jobs">
+      <thead><tr><th>job</th><th>algo</th><th>status</th>
+        <th class="num">wall s</th><th>run dir</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <div id="job-errors"></div>
+  </section>
+  <section>
+    <h2>Research store</h2>
+    <div id="research" class="dimtext">—</div>
+  </section>
+</div>
+</main>
+<script>
+"use strict";
+const COLORS = ["#6fb3ff","#6fce8f","#e0b467","#e6816f","#b48fe0",
+                "#5fc6c9","#d98cb3","#a4b871"];
+let runs = [];
+
+const $ = (id) => document.getElementById(id);
+const api = async (path, opts) => {
+  const res = await fetch(path, opts);
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || res.statusText);
+  return body;
+};
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g,
+  (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt = (v, d = 1) => (typeof v === "number" ? v.toFixed(d) : "—");
+
+async function loadRuns() {
+  runs = await api("/api/runs");
+  const rows = runs.map((r, i) => `<tr>
+    <td><input type="checkbox" data-i="${i}"></td>
+    <td title="${esc(r.run_id)}">${esc((r.run_id || r.dir).slice(0, 26))}</td>
+    <td>${esc(r.algo)}</td><td>${esc(r.env_id)}</td>
+    <td class="num">${esc(r.seed)}</td>
+    <td class="num">${fmt(r.final_eval_return_mean)}${
+      typeof r.final_eval_return_std === "number"
+        ? " ± " + fmt(r.final_eval_return_std) : ""}</td>
+    <td class="num">${r.total_env_steps ?? "—"}</td></tr>`);
+  $("runs").querySelector("tbody").innerHTML =
+    rows.join("") || `<tr><td colspan="7" class="dimtext">no runs found</td></tr>`;
+}
+
+const selected = () =>
+  [...document.querySelectorAll("#runs input:checked")].map((c) => runs[+c.dataset.i]);
+
+async function compareSelected() {
+  const sel = selected();
+  const el = $("compare");
+  if (!sel.length) { el.innerHTML = `<span class="caveat">No runs selected.</span>`; return; }
+  try {
+    const out = await api("/api/compare?dirs=" +
+      encodeURIComponent(sel.map((r) => r.dir).join("|")));
+    let html = "";
+    for (const g of out.groups) {
+      const s = g.stats;
+      html += `<h3 style="font-size:13px;margin:10px 0 4px">${esc(g.algo)} · ${esc(g.env_id)}
+        <span class="dimtext">(n=${s.n})</span></h3>
+        <table><tr><th class="num">IQM</th><th class="num">95% CI</th>
+        <th class="num">mean</th><th class="num">median</th>
+        <th class="num">min</th><th class="num">max</th></tr>
+        <tr><td class="num">${fmt(s.iqm)}</td>
+        <td class="num">[${fmt(s.iqm_ci_low)}, ${fmt(s.iqm_ci_high)}]</td>
+        <td class="num">${fmt(s.mean)}</td><td class="num">${fmt(s.median)}</td>
+        <td class="num">${fmt(s.min)}</td><td class="num">${fmt(s.max)}</td></tr></table>`;
+    }
+    html += out.caveats.map((c) => `<p class="caveat">⚠ ${esc(c)}</p>`).join("");
+    html += out.excluded.map((e) =>
+      `<p class="error">excluded ${esc(e.dir)}: ${esc(e.reason)}</p>`).join("");
+    el.innerHTML = html || `<span class="dimtext">nothing to compare</span>`;
+  } catch (err) { el.innerHTML = `<span class="error">${esc(err.message)}</span>`; }
+}
+
+async function plotSelected() {
+  const sel = selected().filter((r) => r.has_metrics).slice(0, COLORS.length);
+  const chart = $("chart"), legend = $("legend");
+  chart.innerHTML = ""; legend.innerHTML = "";
+  if (!sel.length) return;
+  const all = await Promise.all(sel.map((r) =>
+    api("/api/metrics?dir=" + encodeURIComponent(r.dir))));
+  const keys = new Set();
+  for (const h of all) for (const e of h)
+    for (const k of Object.keys(e)) if (typeof e[k] === "number") keys.add(k);
+  const sel_el = $("metric-key");
+  const prev = sel_el.value;
+  sel_el.innerHTML = [...keys].sort().map((k) =>
+    `<option${k === (prev || "eval_return_mean") ? " selected" : ""}>${esc(k)}</option>`).join("");
+  const yKey = sel_el.value || "eval_return_mean";
+  const xKey = keys.has("env_steps") ? "env_steps" : null;
+  const series = all.map((h) => h
+    .filter((e) => typeof e[yKey] === "number")
+    .map((e, i) => [xKey && typeof e[xKey] === "number" ? e[xKey] : i, e[yKey]]));
+  const pts = series.flat();
+  if (!pts.length) return;
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  const [x0, x1] = [Math.min(...xs), Math.max(...xs)];
+  const [y0, y1] = [Math.min(...ys), Math.max(...ys)];
+  const X = (x) => 42 + (x1 > x0 ? (x - x0) / (x1 - x0) : 0.5) * 668;
+  const Y = (y) => 240 - (y1 > y0 ? (y - y0) / (y1 - y0) : 0.5) * 226;
+  let svg = `<line x1="42" y1="240" x2="710" y2="240" stroke="#2c323c"/>
+    <line x1="42" y1="14" x2="42" y2="240" stroke="#2c323c"/>
+    <text x="40" y="243" fill="#8a93a1" font-size="10" text-anchor="end">${y0.toFixed(1)}</text>
+    <text x="40" y="20" fill="#8a93a1" font-size="10" text-anchor="end">${y1.toFixed(1)}</text>`;
+  series.forEach((s, i) => {
+    if (!s.length) return;
+    svg += `<polyline fill="none" stroke="${COLORS[i]}" stroke-width="1.6"
+      points="${s.map(([x, y]) => X(x).toFixed(1) + "," + Y(y).toFixed(1)).join(" ")}"/>`;
+    legend.insertAdjacentHTML("beforeend",
+      `<span style="color:${COLORS[i]}">${esc(sel[i].algo)} s${esc(sel[i].seed)}</span>`);
+  });
+  chart.innerHTML = svg;
+}
+
+let algoSpecs = [];
+async function loadAlgos() {
+  algoSpecs = await api("/api/algos");
+  $("algo").innerHTML = algoSpecs.map((a) => `<option>${esc(a.name)}</option>`).join("");
+  renderFields();
+}
+function renderFields() {
+  const spec = algoSpecs.find((a) => a.name === $("algo").value);
+  $("fields").innerHTML = (spec ? spec.fields : []).map((f) => `<label>${esc(f.name)}
+    <input data-field="${esc(f.name)}"
+      placeholder="${esc(JSON.stringify(f.default))}${f.required ? " (required)" : ""}">
+  </label>`).join("");
+}
+async function launch() {
+  const overrides = {};
+  for (const input of document.querySelectorAll("#fields input")) {
+    const raw = input.value.trim();
+    if (!raw) continue;
+    try { overrides[input.dataset.field] = JSON.parse(raw); }
+    catch { overrides[input.dataset.field] = raw; }
+  }
+  const msg = $("launch-msg");
+  try {
+    const job = await api("/api/launch", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ algo: $("algo").value, overrides }),
+    });
+    msg.innerHTML = `<p class="dimtext">launched <b>${esc(job.job_id)}</b> → ${esc(job.run_dir)}</p>`;
+    loadJobs();
+  } catch (err) { msg.innerHTML = `<p class="error">${esc(err.message)}</p>`; }
+}
+
+async function loadJobs() {
+  const jobs = await api("/api/jobs");
+  $("jobs").querySelector("tbody").innerHTML = jobs.map((j) => `<tr>
+    <td>${esc(j.job_id)}</td><td>${esc(j.algo)}</td>
+    <td class="status-${esc(j.status)}">${esc(j.status)}</td>
+    <td class="num">${fmt(j.wall_time_s)}</td>
+    <td title="${esc(j.run_dir)}">${esc(j.run_dir.split("/").slice(-1)[0])}</td></tr>`)
+    .join("") || `<tr><td colspan="5" class="dimtext">nothing launched yet</td></tr>`;
+  $("job-errors").innerHTML = jobs.filter((j) => j.error)
+    .map((j) => `<p class="error">${esc(j.job_id)}: ${esc(j.error.slice(-400))}</p>`).join("");
+}
+
+async function loadResearch() {
+  const r = await api("/api/research");
+  $("research").innerHTML = !r.present
+    ? `no store at <code>${esc(r.store)}</code>`
+    : Object.entries(r.kinds).map(([k, ids]) =>
+        `<div><b>${esc(k)}</b> (${ids.length}): ${ids.map(esc).join(", ")}</div>`
+      ).join("") || "store is empty";
+}
+
+loadRuns(); loadAlgos(); loadJobs(); loadResearch();
+setInterval(() => { loadJobs(); }, 4000);
+</script>
+</body>
+</html>

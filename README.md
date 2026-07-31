@@ -39,6 +39,18 @@ Every run writes a self-describing directory under `outputs/`:
 learning-curve plot. Evaluate a finished run with
 `uv run rlcore-evaluate <run_dir>`.
 
+## Explore in the browser
+
+```sh
+uv run rlcore-lab        # local dashboard on http://127.0.0.1:8765
+```
+
+Browse and compare recorded runs (IQM + bootstrap CIs with caveats
+stated), overlay learning curves, launch new runs — including your own
+algorithm packages under `rlcore.agents`, which are discovered
+automatically — and list research-store entities. Localhost-only, no
+accounts; see [`docs/lab.md`](docs/lab.md).
+
 ## Compare things fairly
 
 ```sh
@@ -71,6 +83,7 @@ tested in CI):
 | [`docs/design/`](docs/design/) | Per-milestone design records (decisions + self-reviews) |
 | [`docs/reproductions/`](docs/reproductions/) | Honestly-labeled reproduction packages |
 | [`docs/research.md`](docs/research.md) | The research layer and its approval gates |
+| [`docs/lab.md`](docs/lab.md) | The local dashboard (`rlcore-lab`) |
 | [`docs/DOCKER.md`](docs/DOCKER.md) / [`docs/CLOUD.md`](docs/CLOUD.md) | Containers, devices, preemption recovery |
 | [`benchmarks/results/`](benchmarks/results/) | Recorded validations — raw JSON + protocol |
 
