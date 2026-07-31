@@ -30,6 +30,15 @@ class TestDiscovery:
         assert by_name["seed"]["default"] == 0
         assert isinstance(by_name["hidden_sizes"]["default"], list)  # default_factory
 
+    def test_nan_defaults_become_strings(self) -> None:
+        # SAC's auto target_entropy sentinel is NaN; browsers reject NaN in
+        # JSON, so the field description must fall back to its repr.
+        fields = algo_fields(discover_algos()["sac"])
+        by_name = {field["name"]: field for field in fields}
+        assert by_name["target_entropy"]["default"] == "nan"
+        for field in fields:
+            json.dumps(field, allow_nan=False)  # strict-JSON clean
+
 
 class TestValidation:
     def test_unknown_algo_rejected(self) -> None:

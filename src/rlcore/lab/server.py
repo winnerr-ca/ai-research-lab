@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import threading
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -75,6 +76,17 @@ def _research_listing(store_root: Path) -> dict[str, Any]:
     return {"present": True, "store": str(store_root), "kinds": kinds}
 
 
+def _finite(value: Any) -> Any:  # noqa: ANN401 - operates on arbitrary JSON trees
+    """Recursively replace non-finite floats with ``None`` for strict JSON."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {key: _finite(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_finite(item) for item in value]
+    return value
+
+
 class _LabHandler(BaseHTTPRequestHandler):
     """Routes dashboard requests; all responses are JSON except the page."""
 
@@ -87,7 +99,12 @@ class _LabHandler(BaseHTTPRequestHandler):
         logger.debug("%s - %s", self.address_string(), format % args)
 
     def _send_json(self, payload: Any, status: int = 200) -> None:  # noqa: ANN401
-        body = json.dumps(payload).encode()
+        try:
+            body = json.dumps(payload, allow_nan=False).encode()
+        except ValueError:
+            # NaN/Infinity leak in from real artifacts (e.g. DQN metrics
+            # before the first loss); browsers reject them, so map to null.
+            body = json.dumps(_finite(payload)).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))

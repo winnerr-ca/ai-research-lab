@@ -35,8 +35,13 @@ def make_run(root: Path, name: str) -> None:
     (run_dir / "result.json").write_text(
         json.dumps({"final_eval_return_mean": 400.0, "total_env_steps": 1000})
     )
+    # Second line carries NaN the way DQN's trainer really writes it
+    # (Python json emits bare NaN); the server must map it to null.
     (run_dir / "metrics.jsonl").write_text(
-        json.dumps({"update": 1.0, "eval_return_mean": 5.0}) + "\n"
+        json.dumps({"update": 1.0, "eval_return_mean": 5.0})
+        + "\n"
+        + json.dumps({"update": 2.0, "loss": float("nan")})
+        + "\n"
     )
 
 
@@ -63,7 +68,14 @@ def server(tmp_path: Path) -> Iterator[str]:
 
 def get_json(url: str) -> Any:  # noqa: ANN401 - JSON payload shapes vary by endpoint
     with urllib.request.urlopen(url) as response:
-        return json.loads(response.read())
+        raw = response.read()
+
+    # Strict parse: browsers reject NaN/Infinity, so the server must never
+    # emit them (a real regression: SAC's NaN target_entropy default).
+    def _reject(constant: str) -> None:
+        raise AssertionError(f"server emitted non-JSON constant {constant!r}")
+
+    return json.loads(raw, parse_constant=_reject)
 
 
 class TestRoutes:
@@ -77,7 +89,10 @@ class TestRoutes:
         runs = get_json(server + "/api/runs")
         assert [run["run_id"] for run in runs] == ["demo"]
         metrics = get_json(server + "/api/metrics?dir=demo")
-        assert metrics == [{"update": 1.0, "eval_return_mean": 5.0}]
+        assert metrics == [
+            {"update": 1.0, "eval_return_mean": 5.0},
+            {"update": 2.0, "loss": None},
+        ]
         compared = get_json(server + "/api/compare?dirs=demo")
         assert compared["groups"][0]["stats"]["mean"] == 400.0
 

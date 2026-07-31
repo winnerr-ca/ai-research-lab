@@ -120,9 +120,14 @@ def discover_algos() -> dict[str, AlgoSpec]:
 
 
 def _json_safe(value: Any) -> Any:  # noqa: ANN401 - defaults are heterogeneous by design
-    """Return ``value`` if JSON-serializable, else its ``repr``."""
+    """Return ``value`` if strictly JSON-serializable, else its ``repr``.
+
+    ``allow_nan=False`` matters: Python would happily emit ``NaN`` (e.g.
+    SAC's auto ``target_entropy`` sentinel), which browsers reject as
+    invalid JSON.
+    """
     try:
-        json.dumps(value)
+        json.dumps(value, allow_nan=False)
     except (TypeError, ValueError):
         return repr(value)
     return value
