@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import threading
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
@@ -193,6 +194,10 @@ def lab_main() -> None:
         store_root=args.store,
         jobs=JobManager(out_root),
     )
+    # Warm algorithm discovery off the request path: the first import of the
+    # agents' train modules pulls in torch, which can take long enough on a
+    # small machine that the page's first /api/algos call would race it.
+    threading.Thread(target=discover_algos, daemon=True).start()
     server = LabServer((args.host, args.port), context)
     logger.info(
         "rlcore-lab on http://%s:%d  (runs: %s | launches: %s | store: %s)",

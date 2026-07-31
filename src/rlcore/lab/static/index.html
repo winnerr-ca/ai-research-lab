@@ -235,7 +235,16 @@ async function plotSelected() {
 
 let algoSpecs = [];
 async function loadAlgos() {
-  algoSpecs = await api("/api/algos");
+  try {
+    algoSpecs = await api("/api/algos");
+  } catch (err) {
+    $("launch-msg").innerHTML =
+      `<p class="dimtext">loading algorithms… (server may still be starting: ` +
+      `${esc(err.message)}) — retrying in 5s</p>`;
+    setTimeout(loadAlgos, 5000);
+    return;
+  }
+  $("launch-msg").innerHTML = "";
   $("algo").innerHTML = algoSpecs.map((a) => `<option>${esc(a.name)}</option>`).join("");
   renderFields();
 }
@@ -265,8 +274,12 @@ async function launch() {
   } catch (err) { msg.innerHTML = `<p class="error">${esc(err.message)}</p>`; }
 }
 
+let jobsSig = "";
 async function loadJobs() {
-  const jobs = await api("/api/jobs");
+  let jobs;
+  try { jobs = await api("/api/jobs"); } catch { return; }
+  const sig = jobs.map((j) => j.job_id + j.status).join("|");
+  if (sig !== jobsSig) { jobsSig = sig; loadRuns(); }
   $("jobs").querySelector("tbody").innerHTML = jobs.map((j) => `<tr>
     <td>${esc(j.job_id)}</td><td>${esc(j.algo)}</td>
     <td class="status-${esc(j.status)}">${esc(j.status)}</td>
