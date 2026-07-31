@@ -64,6 +64,14 @@
     vertical-align: -1px;
   }
   .dimtext { color: var(--dim); font-size: 12.5px; }
+  details.help { margin: 8px 0 2px; font-size: 12.5px; color: var(--dim); }
+  details.help summary { cursor: pointer; color: var(--accent); font-size: 12px;
+    user-select: none; }
+  details.help p { margin: 6px 0 0; line-height: 1.5; }
+  #story-panel { margin: 16px 20px 0; }
+  #story p { margin: 5px 0; line-height: 1.55; }
+  #story .now { color: var(--accent); }
+  #story .tip { color: var(--ok); }
   @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -72,10 +80,22 @@
   <h1>rlcore lab</h1>
   <span class="sub">local research dashboard — every number traces to a run directory</span>
 </header>
+<section id="story-panel">
+  <h2>What's happening</h2>
+  <div id="story" class="dimtext">reading the lab state…</div>
+</section>
 <main>
 <div>
   <section>
     <h2>Runs</h2>
+    <details class="help"><summary>What is this?</summary>
+      <p>Every training you run produces a <b>run</b>: a folder on disk recording the
+      exact settings, the random seed, and the results — so any number can be traced
+      back and reproduced. This table lists them all. <b>final eval</b> is the score
+      when the trained agent was tested (average ± spread over 20 test episodes with
+      exploration turned off). <b>steps</b> is how many environment interactions the
+      training used — its budget. Tick checkboxes to plot, watch, or compare runs.</p>
+    </details>
     <div class="row">
       <button onclick="loadRuns()">Refresh</button>
       <button class="primary" onclick="compareSelected()">Compare selected</button>
@@ -93,11 +113,27 @@
   </section>
   <section>
     <h2>Learning curves</h2>
+    <details class="help"><summary>What is this?</summary>
+      <p>A learning curve shows the agent getting better (or not) <i>during</i>
+      training: score on the vertical axis, training progress on the horizontal.
+      A rising curve means it's learning; a flat one means it's stuck; a jagged one
+      is normal — reinforcement learning is noisy. Use the <b>metric</b> dropdown to
+      switch what's plotted; the explanation of the chosen metric appears below the
+      chart.</p>
+    </details>
     <svg id="chart" viewBox="0 0 720 260" preserveAspectRatio="none"></svg>
     <div class="legend" id="legend"></div>
+    <div class="dimtext" id="metric-help"></div>
   </section>
   <section>
     <h2>Agent view</h2>
+    <details class="help"><summary>What is this?</summary>
+      <p>This plays a <i>fresh</i> test episode with the trained agent and draws it
+      live — you're watching the actual decisions the neural network makes at every
+      step, not a recording of training. A well-trained CartPole agent keeps the pole
+      up the whole time; a barely-trained one drops it in seconds. Comparing the two
+      is the clearest picture of what training changed.</p>
+    </details>
     <div class="row">
       <button class="primary" onclick="watchSelected()">Watch selected agent</button>
       <button onclick="replayAgain()">Replay</button>
@@ -108,6 +144,16 @@
   </section>
   <section>
     <h2>Comparison</h2>
+    <details class="help"><summary>What is this?</summary>
+      <p>One training run proves little — luck (the seed) matters a lot in RL. The
+      honest workflow is: run the <i>same</i> setup with several different seeds, then
+      compare the group statistically. <b>IQM</b> is a robust average (it ignores the
+      most extreme quarter of results on each side). The <b>95% CI</b> is the
+      uncertainty range: "the true typical score is probably in here." Wide interval =
+      too few runs to be sure. The yellow warnings below results are the platform
+      telling you when your comparison isn't yet trustworthy — take them seriously,
+      that honesty is the whole point of this lab.</p>
+    </details>
     <div id="compare" class="dimtext">Select runs above and press “Compare selected”.
       Groups are (algorithm, environment); scores are recorded final evaluation
       returns; intervals are bootstrap CIs from rlcore.stats with a fixed seed.</div>
@@ -116,10 +162,20 @@
 <div>
   <section>
     <h2>Launch a run</h2>
+    <details class="help"><summary>What is this?</summary>
+      <p>Pick an algorithm, optionally change settings, press Launch — a real training
+      process starts on this machine. A description of the chosen algorithm appears
+      below the dropdown. The important fields: <b>seed</b> (change it to repeat the
+      same experiment with different luck — that's how you build a fair comparison),
+      the budget field (<b>updates</b> or <b>total_steps</b>: more = better but
+      slower), and <b>env_id</b> (which task). Everything else has sensible defaults
+      shown in grey.</p>
+    </details>
     <div class="row">
       <select id="algo" style="width:auto" onchange="renderFields()"></select>
       <button class="primary" onclick="launch()">Launch</button>
     </div>
+    <p class="dimtext" id="algo-info"></p>
     <div class="fields" id="fields"></div>
     <p class="dimtext">Empty fields use the config default shown as placeholder.
       Values are parsed as JSON (numbers, true/false, lists) or kept as strings.
@@ -146,6 +202,103 @@
 const COLORS = ["#6fb3ff","#6fce8f","#e0b467","#e6816f","#b48fe0",
                 "#5fc6c9","#d98cb3","#a4b871"];
 let runs = [];
+let lastJobs = [];
+
+const ALGO_INFO = {
+  reinforce: "REINFORCE is the simplest learning method here: it plays whole games, " +
+    "then makes the moves from high-scoring games more likely and the rest less " +
+    "likely. Simple but noisy — results vary a lot between seeds.",
+  ppo: "PPO is the modern workhorse: like REINFORCE, but it estimates how much " +
+    "better each move was than expected and only lets the strategy change a little " +
+    "per update, which makes learning much more stable.",
+  dqn: "DQN learns a score (Q-value) for every possible move in every situation and " +
+    "picks the highest. It stores past experience in a replay memory and keeps " +
+    "re-learning from it.",
+  sac: "SAC handles continuous controls (like applying torque, not just " +
+    "left/right). It learns value estimates plus a strategy, and deliberately keeps " +
+    "some randomness so it explores instead of settling too early.",
+};
+const ENV_INFO = {
+  "CartPole-v1": "CartPole: keep a pole balanced upright on a moving cart by " +
+    "pushing left or right. +1 point per step survived, capped at 500 — " +
+    "so 500 is a perfect score.",
+  "Pendulum-v1": "Pendulum: swing a hanging rod upright and hold it by applying " +
+    "torque. Scores are penalties (negative); closer to 0 is better, and around " +
+    "−150 or better is good.",
+  "Acrobot-v1": "Acrobot: a two-link arm must swing itself up to touch the green " +
+    "line. −1 per step until it succeeds, so less negative is better " +
+    "(around −100 is good).",
+};
+const METRIC_INFO = {
+  eval_return_mean: "the agent's average score when tested with exploration turned " +
+    "off — the truest measure of skill. Higher is better.",
+  eval_return_std: "how much the test scores varied between episodes — smaller " +
+    "means more consistent.",
+  env_steps: "how many environment interactions training had used by that point " +
+    "(the x-axis budget).",
+  train_return: "average score of games played during training — noisier than the " +
+    "eval score because the agent is still exploring.",
+  loss: "the internal error the network is minimizing. Falling loss means the " +
+    "network is fitting its targets — but it is not a game score.",
+  q_mean: "the network's average estimate of future score — watch that it grows " +
+    "sensibly rather than exploding.",
+  update: "which training update (round of learning) the row was recorded at.",
+  epsilon: "how often the agent currently picks a random move to explore " +
+    "(DQN anneals this from 1 toward its floor).",
+  alpha: "SAC's exploration temperature — how strongly it currently values " +
+    "acting randomly.",
+};
+
+function renderStory() {
+  const parts = [];
+  const running = lastJobs.filter((j) => j.status === "running");
+  const failed = lastJobs.filter((j) => j.status === "failed");
+  for (const j of running) {
+    const envId = j.overrides.env_id ||
+      (j.algo === "sac" ? "Pendulum-v1" : "CartPole-v1");
+    parts.push(`<p class="now">⏳ <b>${esc(j.algo)}</b> is training on ` +
+      `${esc(envId)} right now (${fmt(j.wall_time_s, 0)}s in). ` +
+      `${esc(ALGO_INFO[j.algo] || "")} It will appear in the Runs table the ` +
+      `moment it finishes.</p>`);
+  }
+  for (const j of failed.slice(0, 2)) {
+    parts.push(`<p>❌ Job ${esc(j.job_id)} (${esc(j.algo)}) failed — its error is ` +
+      `shown under the Jobs panel. Failures are recorded, never hidden.</p>`);
+  }
+  if (runs.length) {
+    const byEnv = {};
+    for (const r of runs) {
+      if (typeof r.final_eval_return_mean !== "number") continue;
+      const e = byEnv[r.env_id] ??= { n: 0, best: -Infinity };
+      e.n += 1;
+      e.best = Math.max(e.best, r.final_eval_return_mean);
+    }
+    for (const [env, e] of Object.entries(byEnv)) {
+      parts.push(`<p>📊 ${e.n} finished run${e.n > 1 ? "s" : ""} on ${esc(env)}; ` +
+        `best test score so far: <b>${e.best.toFixed(1)}</b>. ` +
+        `${esc(ENV_INFO[env] || "")}</p>`);
+    }
+    const counts = {};
+    for (const r of runs) counts[`${r.algo}|${r.env_id}`] =
+      (counts[`${r.algo}|${r.env_id}`] || 0) + 1;
+    const most = Math.max(...Object.values(counts));
+    if (most >= 3) {
+      parts.push(`<p class="tip">✅ You have ${most} runs of the same setup — tick ` +
+        `them and press <b>Compare selected</b> for real multi-seed statistics.</p>`);
+    } else if (!running.length) {
+      parts.push(`<p class="tip">💡 Next step: launch the same setup again with ` +
+        `<b>seed</b> set to 1, then 2. Same experiment, different luck — comparing ` +
+        `across seeds is how RL results become trustworthy.</p>`);
+    }
+    parts.push(`<p class="tip">👀 Tick a finished run and press <b>Watch selected ` +
+      `agent</b> to literally see what it learned.</p>`);
+  } else if (!running.length) {
+    parts.push(`<p>Nothing has been trained yet. Pick an algorithm on the right ` +
+      `(reinforce is the quickest), set <b>updates</b> to 50 for a fast test, and ` +
+      `press <b>Launch</b>. This panel narrates everything from there.</p>`);
+  }
+  $("story").innerHTML = parts.join("");
+}
 
 const $ = (id) => document.getElementById(id);
 const api = async (path, opts) => {
@@ -171,6 +324,7 @@ async function loadRuns() {
     <td class="num">${r.total_env_steps ?? "—"}</td></tr>`);
   $("runs").querySelector("tbody").innerHTML =
     rows.join("") || `<tr><td colspan="7" class="dimtext">no runs found</td></tr>`;
+  renderStory();
 }
 
 const selected = () =>
@@ -196,6 +350,12 @@ async function compareSelected() {
         <td class="num">${fmt(s.mean)}</td><td class="num">${fmt(s.median)}</td>
         <td class="num">${fmt(s.min)}</td><td class="num">${fmt(s.max)}</td></tr></table>`;
     }
+    if (out.groups.length) {
+      html += `<p class="dimtext">How to read this: <b>IQM</b> is a robust average
+        of the group's test scores (ignores the most extreme results); the
+        <b>95% CI</b> is the uncertainty range — if two setups' intervals overlap
+        heavily, you can't honestly say one beats the other yet.</p>`;
+    }
     html += out.caveats.map((c) => `<p class="caveat">⚠ ${esc(c)}</p>`).join("");
     html += out.excluded.map((e) =>
       `<p class="error">excluded ${esc(e.dir)}: ${esc(e.reason)}</p>`).join("");
@@ -218,6 +378,9 @@ async function plotSelected() {
   sel_el.innerHTML = [...keys].sort().map((k) =>
     `<option${k === (prev || "eval_return_mean") ? " selected" : ""}>${esc(k)}</option>`).join("");
   const yKey = sel_el.value || "eval_return_mean";
+  $("metric-help").textContent = METRIC_INFO[yKey]
+    ? `${yKey}: ${METRIC_INFO[yKey]}` : yKey ? `${yKey}: a metric this algorithm
+    records during training (see docs/algorithms/ for its exact meaning).` : "";
   const xKey = keys.has("env_steps") ? "env_steps" : null;
   const series = all.map((h) => h
     .filter((e) => typeof e[yKey] === "number")
@@ -260,6 +423,7 @@ async function loadAlgos() {
 }
 function renderFields() {
   const spec = algoSpecs.find((a) => a.name === $("algo").value);
+  $("algo-info").textContent = ALGO_INFO[$("algo").value] || "";
   $("fields").innerHTML = (spec ? spec.fields : []).map((f) => `<label>${esc(f.name)}
     <input data-field="${esc(f.name)}"
       placeholder="${esc(JSON.stringify(f.default))}${f.required ? " (required)" : ""}">
@@ -288,8 +452,9 @@ let jobsSig = "";
 async function loadJobs() {
   let jobs;
   try { jobs = await api("/api/jobs"); } catch { return; }
+  lastJobs = jobs;
   const sig = jobs.map((j) => j.job_id + j.status).join("|");
-  if (sig !== jobsSig) { jobsSig = sig; loadRuns(); }
+  if (sig !== jobsSig) { jobsSig = sig; loadRuns(); } else { renderStory(); }
   $("jobs").querySelector("tbody").innerHTML = jobs.map((j) => `<tr>
     <td>${esc(j.job_id)}</td><td>${esc(j.algo)}</td>
     <td class="status-${esc(j.status)}">${esc(j.status)}</td>
@@ -319,8 +484,9 @@ function playTraj() {
     if (i >= traj.states.length) { clearInterval(agentTimer); agentTimer = null; return; }
     svg.innerHTML = drawState(traj.env_id, traj.states[i]);
     if (i > 0) total += traj.rewards[i - 1] ?? 0;
-    hud.textContent = `${traj.algo} on ${traj.env_id} — step ${i}/${traj.steps}` +
-      ` · reward so far ${total.toFixed(1)} · episode return ${traj.episode_return.toFixed(1)}`;
+    hud.innerHTML = `<b>${esc(traj.algo)}</b> on ${esc(traj.env_id)} — step ` +
+      `${i}/${traj.steps} · reward so far ${total.toFixed(1)} · episode return ` +
+      `${traj.episode_return.toFixed(1)}<br>${esc(ENV_INFO[traj.env_id] || "")}`;
     i++;
   }, 25);
 }
